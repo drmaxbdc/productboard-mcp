@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "productboard": {
+      "command": "node",
+      "args": ["build/index.js"],
+      "env": {
+        "PRODUCTBOARD_ACCESS_TOKEN": "${PRODUCTBOARD_ACCESS_TOKEN}"
+      }
+    }
+  }
+}
