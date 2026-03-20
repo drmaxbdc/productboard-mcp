@@ -304,6 +304,41 @@ export function registerNoteTools(server: McpServer) {
   );
 
   server.tool(
+    "list_all_notes",
+    "Bulk-fetch all Productboard notes using V1 API with auto-pagination. Returns rich V1 response with displayUrl. Safety limit: 5000 notes max. Use for daily reports or full exports.",
+    {
+      createdFrom: z.string().optional().describe("ISO 8601 date — notes created after"),
+      createdTo: z.string().optional().describe("ISO 8601 date — notes created before"),
+      updatedFrom: z.string().optional().describe("ISO 8601 date — notes updated after"),
+      updatedTo: z.string().optional().describe("ISO 8601 date — notes updated before"),
+      ownerEmail: z.string().optional().describe("Filter by owner email"),
+      processed: z.boolean().optional().describe("Filter by processed status"),
+      limit: z.number().min(1).max(5000).default(5000).describe("Safety limit (default 5000)"),
+    },
+    async ({ createdFrom, createdTo, updatedFrom, updatedTo, ownerEmail, processed, limit }) => {
+      try {
+        const url = new URL("https://api.productboard.com/notes");
+        if (createdFrom) url.searchParams.set("createdFrom", createdFrom);
+        if (createdTo) url.searchParams.set("createdTo", createdTo);
+        if (updatedFrom) url.searchParams.set("updatedFrom", updatedFrom);
+        if (updatedTo) url.searchParams.set("updatedTo", updatedTo);
+        if (ownerEmail) url.searchParams.set("owner[email]", ownerEmail);
+        if (processed !== undefined) url.searchParams.set("state", processed ? "processed" : "unprocessed");
+
+        const result = await v1PaginatedRequest<V1Note>(url.toString(), undefined, limit);
+        return toolResult({
+          notes: result.data,
+          count: result.data.length,
+          totalResults: result.totalResults,
+          nextPageCursor: result.nextPageCursor,
+        });
+      } catch (error) {
+        return toolError(error);
+      }
+    }
+  );
+
+  server.tool(
     "get_note_v1",
     "Get a Productboard note with rich V1 response: displayUrl, followers, linked features, full owner info. Use this when you need the display URL or detailed metadata.",
     {
