@@ -2,6 +2,7 @@ import { ProductboardApiError } from "../utils.js";
 import type { PaginatedResponse } from "../types.js";
 
 const BASE_URL = "https://api.productboard.com/v2";
+const V1_BASE_URL = "https://api.productboard.com";
 const MAX_RETRIES = 3;
 
 function getToken(): string {
@@ -96,6 +97,112 @@ export async function apiRequest<T>(
     message: "Rate limit exceeded after maximum retries",
   });
 }
+
+// ── V1 API helpers ──────────────────────────────────────────────────────
+
+function v1Headers(extra?: Record<string, string>): Record<string, string> {
+  return {
+    Authorization: `Bearer ${getToken()}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    "X-Version": "1",
+    ...extra,
+  };
+}
+
+export async function v1ApiRequest<T>(
+  method: string,
+  path: string,
+  body?: unknown
+): Promise<T> {
+  const url = path.startsWith("http") ? path : `${V1_BASE_URL}${path}`;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: v1Headers(),
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return await handleResponse<T>(response);
+    } catch (error: unknown) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "status" in error &&
+        (error as { status: number }).status === 429 &&
+        attempt < MAX_RETRIES
+      ) {
+        const retryAfter = (error as { retryAfter?: string }).retryAfter;
+        const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : (attempt + 1) * 2000;
+        console.error(`Rate limited, retrying in ${waitMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await sleep(waitMs);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new ProductboardApiError({
+    status: 429,
+    message: "Rate limit exceeded after maximum retries",
+  });
+}
+
+/**
+ * V1 paginated GET. Uses pageCursor query param and pageLimit for page size.
+ * Accepts relative path or absolute URL (for pre-built URLs with array params).
+ */
+export async function v1PaginatedRequest<T>(
+  pathOrUrl: string,
+  params?: Record<string, string | number | boolean | undefined>,
+  limit?: number
+): Promise<{ data: T[]; nextPageCursor?: string; totalResults?: number }> {
+  const maxItems = limit ?? 25;
+  const allItems: T[] = [];
+  let totalResults: number | undefined;
+  let lastCursor: string | undefined;
+
+  const url = new URL(pathOrUrl.startsWith("http") ? pathOrUrl : `${V1_BASE_URL}${pathOrUrl}`);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) {
+        url.searchParams.set(key, String(value));
+      }
+    }
+  }
+  if (!url.searchParams.has("pageLimit")) {
+    url.searchParams.set("pageLimit", String(Math.min(maxItems, 100)));
+  }
+
+  let currentUrl = url.toString();
+
+  while (allItems.length < maxItems) {
+    const response = await v1ApiRequest<{
+      data: T[];
+      pageCursor?: string;
+      totalResults?: number;
+    }>("GET", currentUrl);
+
+    if (response.totalResults !== undefined) totalResults = response.totalResults;
+    if (response.data) allItems.push(...response.data);
+    lastCursor = response.pageCursor;
+
+    if (!response.pageCursor || allItems.length >= maxItems) break;
+
+    const nextUrl = new URL(currentUrl);
+    nextUrl.searchParams.set("pageCursor", response.pageCursor);
+    currentUrl = nextUrl.toString();
+  }
+
+  return {
+    data: allItems.slice(0, maxItems),
+    nextPageCursor: lastCursor,
+    totalResults,
+  };
+}
+
+// ── V2 pagination ───────────────────────────────────────────────────────
 
 /**
  * Paginated GET request. The V2 API uses cursor-based pagination via `links.next`.

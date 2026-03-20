@@ -76,3 +76,29 @@ export interface MemberActivity {
   memberId: string;
   activity: Record<string, unknown>;
 }
+
+// ── V1 API types ────────────────────────────────────────────────────────
+
+export interface V1Note {
+  id: string;
+  title?: string;
+  content?: string;
+  state?: string;
+  displayUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: { name?: string; email?: string };
+  owner?: { name?: string; email?: string };
+  followers?: Array<{ name?: string; email?: string; team?: string }>;
+  features?: Array<{ id: string; type?: string; importance?: string; name?: string }>;
+  tags?: string[];
+  company?: { id?: string; name?: string };
+  source?: { origin?: string; recordId?: string };
+}
+
+export interface Member {
+  id: string;
+  name?: string;
+  email?: string;
+  role?: string;
+}

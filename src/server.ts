@@ -6,6 +6,7 @@ import { registerConfigurationTools } from "./tools/configuration-tools.js";
 import { registerEntityTools } from "./tools/entity-tools.js";
 import { registerRelationshipTools } from "./tools/relationship-tools.js";
 import { registerNoteTools } from "./tools/note-tools.js";
+import { registerMemberTools } from "./tools/member-tools.js";
 
 export function createServer(): McpServer {
   const server = new McpServer({
@@ -18,6 +19,7 @@ export function createServer(): McpServer {
   registerEntityTools(server);
   registerRelationshipTools(server);
   registerNoteTools(server);
+  registerMemberTools(server);
 
   // Analytics tool — GET /analytics/member-activities
   server.tool(
