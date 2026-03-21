@@ -1,6 +1,6 @@
 {
   "name": "@drmaxbdc/productboard-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for Productboard API — hybrid V1+V2, 29 tools including fulltext search, note resolution, and member lookup",
   "type": "module",
   "main": "build/index.js",
@@ -28,6 +28,9 @@
     "LICENSE.md",
     "README.md"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "zod": "^3.24.2"

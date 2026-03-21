@@ -249,14 +249,7 @@ export async function paginatedRequest<T>(
 
   // Extract cursor for next page if more results exist
   let nextPageCursor: string | undefined;
-  if (allItems.length > maxItems && lastNextUrl) {
-    try {
-      const nextUrl = new URL(lastNextUrl);
-      nextPageCursor = nextUrl.searchParams.get("pageCursor") || undefined;
-    } catch {
-      // ignore
-    }
-  } else if (allItems.length >= maxItems && lastNextUrl) {
+  if (lastNextUrl && allItems.length >= maxItems) {
     try {
       const nextUrl = new URL(lastNextUrl);
       nextPageCursor = nextUrl.searchParams.get("pageCursor") || undefined;

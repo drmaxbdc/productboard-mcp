@@ -96,8 +96,13 @@ export function registerEntityTools(server: McpServer) {
     },
     async ({ id, fields }) => {
       try {
-        const params = fields ? `?fields=${encodeURIComponent(fields)}` : "";
-        const response = await apiRequest<{ data: Entity }>("GET", `/entities/${id}${params}`);
+        let path = `/entities/${id}`;
+        if (fields) {
+          const url = new URL(path, "https://api.productboard.com/v2");
+          url.searchParams.set("fields", fields);
+          path = url.pathname + url.search;
+        }
+        const response = await apiRequest<{ data: Entity }>("GET", path);
         return toolResult(response.data ?? response);
       } catch (error) {
         return toolError(error);
@@ -258,12 +263,17 @@ export function registerEntityTools(server: McpServer) {
           links?: { next?: string };
         }>("POST", `/entities/search${queryParams}`, { data });
 
+        let nextPageCursor: string | undefined;
+        if (response.links?.next) {
+          try {
+            nextPageCursor = new URL(response.links.next).searchParams.get("pageCursor") || undefined;
+          } catch { /* ignore malformed URL */ }
+        }
+
         return toolResult({
           entities: response.data,
           count: response.data?.length ?? 0,
-          nextPageCursor: response.links?.next
-            ? new URL(response.links.next).searchParams.get("pageCursor") || undefined
-            : undefined,
+          nextPageCursor,
         });
       } catch (error) {
         return toolError(error);
