@@ -1,13 +1,33 @@
 {
-  "name": "productboard-mcp-server",
+  "name": "@drmaxbdc/productboard-mcp",
   "version": "1.0.0",
-  "description": "MCP server for Productboard V2 API",
+  "description": "MCP server for Productboard API — hybrid V1+V2, 29 tools including fulltext search, note resolution, and member lookup",
   "type": "module",
   "main": "build/index.js",
+  "bin": {
+    "productboard-mcp": "build/index.js"
+  },
   "scripts": {
     "build": "tsc",
-    "start": "node build/index.js"
+    "start": "node build/index.js",
+    "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "mcp",
+    "productboard",
+    "model-context-protocol",
+    "claude"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/drmaxbdc/productboard-mcp.git"
+  },
+  "files": [
+    "build",
+    "LICENSE.md",
+    "README.md"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "zod": "^3.24.2"
