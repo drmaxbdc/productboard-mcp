@@ -62,7 +62,7 @@ export function registerEntityTools(server: McpServer) {
     async ({ type, name, archived, ownerEmail, statusName, parentId, limit, pageCursor, fields }) => {
       try {
         const params: Record<string, string | number | boolean | undefined> = {
-          type,
+          "type[]": type,
         };
         if (name) params.name = name;
         if (archived !== undefined) params.archived = archived;
