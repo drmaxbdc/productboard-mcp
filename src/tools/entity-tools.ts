@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { apiRequest, paginatedRequest } from "../api/client.js";
-import { toolResult, toolError } from "../utils.js";
+import { toolResult, toolError, parseFieldNames } from "../utils.js";
 import type { Entity } from "../types.js";
 
 const ENTITY_TYPES = [
@@ -61,7 +61,7 @@ export function registerEntityTools(server: McpServer) {
     },
     async ({ type, name, archived, ownerEmail, statusName, parentId, limit, pageCursor, fields }) => {
       try {
-        const params: Record<string, string | number | boolean | undefined> = {
+        const params: Record<string, string | number | boolean | string[] | undefined> = {
           "type[]": type,
         };
         if (name) params.name = name;
@@ -70,7 +70,7 @@ export function registerEntityTools(server: McpServer) {
         if (statusName) params["status[name]"] = statusName;
         if (parentId) params["parent[id]"] = parentId;
         if (pageCursor) params.pageCursor = pageCursor;
-        if (fields) params.fields = fields;
+        if (fields) params["fields[]"] = parseFieldNames(fields);
 
         const result = await paginatedRequest<Entity>("/entities", params, limit);
         return toolResult({
@@ -99,7 +99,7 @@ export function registerEntityTools(server: McpServer) {
         let path = `/entities/${id}`;
         if (fields) {
           const url = new URL(path, "https://api.productboard.com/v2");
-          url.searchParams.set("fields", fields);
+          for (const f of parseFieldNames(fields)) url.searchParams.append("fields[]", f);
           path = url.pathname + url.search;
         }
         const response = await apiRequest<{ data: Entity }>("GET", path);
@@ -144,7 +144,7 @@ export function registerEntityTools(server: McpServer) {
 
   server.tool(
     "update_entity",
-    "Update an existing Productboard entity. Use 'fields' for simple field replacement, or 'patch' for granular operations (set, addItems, removeItems, clear). These are mutually exclusive.",
+    "Update an existing Productboard entity. Use 'fields' for simple field replacement, or 'patch' for granular operations (set, addItems, removeItems, clear). These are mutually exclusive. Note: addItems/removeItems on 'teams' is emulated client-side (read-merge-set) due to a PB API bug.",
     {
       id: z.string().describe("Entity UUID to update"),
       fields: z
@@ -166,7 +166,52 @@ export function registerEntityTools(server: McpServer) {
       try {
         let data: unknown;
         if (patch) {
-          data = { patch };
+          // Workaround: PB API returns 500 for addItems/removeItems on "teams".
+          // We emulate by reading current teams, merging, and setting via fields.
+          const teamsWorkaroundOps = patch.filter(
+            (op) => (op.op === "addItems" || op.op === "removeItems") && op.path === "teams"
+          );
+          const remaining = patch.filter(
+            (op) => !((op.op === "addItems" || op.op === "removeItems") && op.path === "teams")
+          );
+
+          if (teamsWorkaroundOps.length > 0) {
+            // Read current teams
+            const entity = await apiRequest<{ data: Entity }>("GET", `/entities/${id}`);
+            let currentTeams: Array<{ id: string }> = Array.isArray(entity.data?.fields?.teams)
+              ? (entity.data.fields.teams as Array<{ id: string }>)
+              : [];
+
+            for (const op of teamsWorkaroundOps) {
+              const items = (Array.isArray(op.value) ? op.value : [op.value]) as Array<{ id: string }>;
+              if (op.op === "addItems") {
+                const existingIds = new Set(currentTeams.map((t) => t.id));
+                for (const item of items) {
+                  if (!existingIds.has(item.id)) currentTeams.push(item);
+                }
+              } else {
+                const removeIds = new Set(items.map((t) => t.id));
+                currentTeams = currentTeams.filter((t) => !removeIds.has(t.id));
+              }
+            }
+
+            // Apply teams via fields (more reliable than patch set for this field)
+            await apiRequest<unknown>("PATCH", `/entities/${id}`, {
+              data: { fields: { teams: currentTeams } },
+            });
+
+            // If no other ops remain, read and return updated entity
+            if (remaining.length === 0) {
+              const updated = await apiRequest<unknown>("GET", `/entities/${id}`);
+              return toolResult(updated);
+            }
+          }
+
+          if (remaining.length > 0) {
+            data = { patch: remaining };
+          } else {
+            return toolError(new Error("No patch operations to apply"));
+          }
         } else if (fields) {
           data = { fields };
         } else {
@@ -254,7 +299,11 @@ export function registerEntityTools(server: McpServer) {
         if (statuses) data.statuses = statuses;
         if (owners) data.owners = owners;
         if (parentId) data.parent = { id: parentId };
-        if (fields) data.fields = fields;
+        if (fields) {
+          const trimmed = fields.trim();
+          // POST search accepts "all"/"default" as strings, or an array of field names
+          data.fields = (trimmed === "all" || trimmed === "default") ? trimmed : parseFieldNames(fields);
+        }
 
         const queryParams = pageCursor ? `?pageCursor=${encodeURIComponent(pageCursor)}` : "";
 

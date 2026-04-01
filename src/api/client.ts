@@ -211,7 +211,7 @@ export async function v1PaginatedRequest<T>(
  */
 export async function paginatedRequest<T>(
   path: string,
-  params?: Record<string, string | number | boolean | undefined>,
+  params?: Record<string, string | number | boolean | string[] | undefined>,
   limit?: number
 ): Promise<{ data: T[]; nextPageCursor?: string }> {
   const maxItems = limit ?? 25;
@@ -222,7 +222,10 @@ export async function paginatedRequest<T>(
   const url = new URL(path.startsWith("http") ? path : `${BASE_URL}${path}`);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined) {
+      if (value === undefined) continue;
+      if (Array.isArray(value)) {
+        for (const v of value) url.searchParams.append(key, v);
+      } else {
         url.searchParams.set(key, String(value));
       }
     }

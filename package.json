@@ -1,7 +1,7 @@
 {
   "name": "@drmaxbdc/productboard-mcp",
-  "version": "1.0.2",
-  "description": "MCP server for Productboard API — hybrid V1+V2, 29 tools including fulltext search, note resolution, and member lookup",
+  "version": "1.0.3",
+  "description": "MCP server for Productboard API — hybrid V1+V2, 30 tools including fulltext search, note comments, and member lookup",
   "type": "module",
   "main": "build/index.js",
   "bin": {

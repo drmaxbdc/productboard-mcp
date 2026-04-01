@@ -33,6 +33,15 @@ export function toolResult(content: unknown): { content: Array<{ type: "text"; t
   };
 }
 
+/**
+ * Parse a `fields` string into individual field names.
+ * Accepts comma-separated field names (e.g. "name,status").
+ * The PB v2 API requires these as repeated `fields[]` query params.
+ */
+export function parseFieldNames(fields: string): string[] {
+  return fields.split(",").map((f) => f.trim()).filter(Boolean);
+}
+
 export function toolError(error: unknown): { content: Array<{ type: "text"; text: string }>; isError: true } {
   return {
     content: [

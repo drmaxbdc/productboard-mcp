@@ -7,7 +7,7 @@ import type { Note, V1Note } from "../types.js";
 export function registerNoteTools(server: McpServer) {
   server.tool(
     "list_notes",
-    "List Productboard notes with pagination and optional filters. Sorted by creation date (newest first).",
+    "List Productboard notes (also known as insights) with pagination and optional filters. Sorted by creation date (newest first).",
     {
       archived: z.boolean().optional().describe("Filter by archived status"),
       processed: z.boolean().optional().describe("Filter by processed status"),
@@ -76,7 +76,7 @@ export function registerNoteTools(server: McpServer) {
 
   server.tool(
     "create_note",
-    "Create a new Productboard note. Call get_note_configurations first to discover available fields and note types (simple, conversation).",
+    "Create a new Productboard note (insight). Call get_note_configurations first to discover available fields and note types (simple, conversation).",
     {
       type: z
         .enum(["simple", "conversation"])
@@ -252,11 +252,32 @@ export function registerNoteTools(server: McpServer) {
     }
   );
 
+  server.tool(
+    "add_note_comment",
+    "Add a comment to a Productboard note (insight). Uses V1 API. To read comments, use get_note_v1 which includes the comments array.",
+    {
+      noteId: z.string().describe("Note UUID"),
+      content: z.string().describe("Comment text"),
+    },
+    async ({ noteId, content }) => {
+      try {
+        const response = await v1ApiRequest<{ data: { id: string } }>(
+          "POST",
+          `/notes/${noteId}/comments`,
+          { content }
+        );
+        return toolResult(response);
+      } catch (error) {
+        return toolError(error);
+      }
+    }
+  );
+
   // ── V1 Note tools (rich response with displayUrl, followers, features) ──
 
   server.tool(
     "search_notes",
-    "Fulltext search across Productboard notes using V1 API. Returns rich response including displayUrl, followers, and linked features. Primary tool for finding notes by content.",
+    "Fulltext search across Productboard notes (insights) using V1 API. Returns rich response including displayUrl, followers, and linked features. Primary tool for finding notes by content.",
     {
       term: z.string().optional().describe("Fulltext search across note title and content"),
       last: z.string().optional().describe("Time window: '6m', '10d', '24h', '1h'"),
