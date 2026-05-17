@@ -260,7 +260,7 @@ export function registerNoteTools(server: McpServer) {
 
   server.tool(
     "add_note_comment",
-    "Add a comment to a Productboard note (insight). Uses V1 API. To read comments, use get_note_v1 which includes the comments array.",
+    "DEPRECATED — will stop working on 2026-07-08 when Productboard sunsets API V1. V2 has no equivalent note-comments endpoint as of 2026-05 (last confirmed via API changelog). No workaround available; the comment feature will be removed in v2.0.0 alongside the V1 client cleanup. Continue using only if comments are critical AND you have a contingency for sunset.",
     {
       noteId: z.string().describe("Note UUID"),
       content: z.string().describe("Comment text"),
@@ -279,50 +279,169 @@ export function registerNoteTools(server: McpServer) {
     }
   );
 
-  // ── V1 Note tools (rich response with displayUrl, followers, features) ──
+  // ── Hybrid search: v2 by default, v1 fallback only for fulltext / multi-tag-AND ──
+
+  // Translate v1 `last` relative-window strings ("6m", "10d", "24h", "1h") to an
+  // ISO-8601 absolute date suitable for v2 `updatedAt.from`. v1 `last` filters
+  // notes created OR updated in the window; since updatedAt >= createdAt always,
+  // `updatedAt.from` captures a tight superset.
+  function relativeWindowToIso(spec: string): string | null {
+    const match = spec.match(/^(\d+)([mdh])$/);
+    if (!match) return null;
+    const n = parseInt(match[1], 10);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const d = new Date();
+    switch (match[2]) {
+      case "m": d.setMonth(d.getMonth() - n); break;
+      case "d": d.setDate(d.getDate() - n); break;
+      case "h": d.setHours(d.getHours() - n); break;
+      default: return null;
+    }
+    return d.toISOString();
+  }
 
   server.tool(
     "search_notes",
-    "Fulltext search across Productboard notes (insights) using V1 API. Returns rich response including displayUrl, followers, and linked features. Primary tool for finding notes by content.",
+    "Search Productboard notes (insights). Routes to V2 POST /notes/search by default; falls back to V1 GET /notes only when term (fulltext) is set or allTags has 2+ values (V2 supports neither). The `last` relative time window (e.g. '6m', '10d') is translated to V2 updatedAt.from automatically, so `last` alone no longer forces V1. V1 fallback path will break on 2026-07-08 (V1 sunset). The response shape differs by path: V1 returns rich objects with top-level displayUrl, followers, features; V2 returns {id, type, links{self,html}, fields{...}, relationships{...}}. Check the apiVersion field in the result, or whether returned notes have top-level `displayUrl` (v1) vs `links.html` (v2). DEFAULT: hides archived notes — set archived=true to include.",
     {
-      term: z.string().optional().describe("Fulltext search across note title and content"),
-      last: z.string().optional().describe("Time window: '6m', '10d', '24h', '1h'"),
-      createdFrom: z.string().optional().describe("ISO 8601 date — notes created after"),
-      createdTo: z.string().optional().describe("ISO 8601 date — notes created before"),
-      updatedFrom: z.string().optional().describe("ISO 8601 date — notes updated after"),
-      updatedTo: z.string().optional().describe("ISO 8601 date — notes updated before"),
+      term: z.string().optional().describe("Fulltext search across note title and content. V1 ONLY — forces V1 fallback path (breaks 2026-07-08)."),
+      last: z.string().optional().describe("Relative time window: '6m', '10d', '24h', '1h'. Translated to V2 updatedAt.from automatically. If you also pass updatedFrom, the explicit updatedFrom wins."),
+      createdFrom: z.string().optional().describe("ISO 8601 date-time — notes created on/after"),
+      createdTo: z.string().optional().describe("ISO 8601 date-time — notes created on/before"),
+      updatedFrom: z.string().optional().describe("ISO 8601 date-time — notes updated on/after"),
+      updatedTo: z.string().optional().describe("ISO 8601 date-time — notes updated on/before"),
       featureId: z.string().optional().describe("Notes linked to this feature UUID"),
-      companyId: z.string().optional().describe("Notes linked to this company UUID"),
-      ownerEmail: z.string().optional().describe("Filter by owner email"),
-      source: z.string().optional().describe("Filter by source origin"),
-      anyTag: z.array(z.string()).optional().describe("Notes matching ANY of these tags"),
-      allTags: z.array(z.string()).optional().describe("Notes matching ALL of these tags"),
+      companyId: z.string().optional().describe("Notes linked to this company (user/company) UUID"),
+      ownerEmail: z.string().optional().describe("Filter by owner email. Requires members:pii:read scope."),
+      source: z.string().optional().describe("Filter by source system (v1 source.origin / v2 metadata.source.system)"),
+      anyTag: z.array(z.string()).optional().describe("Notes matching ANY of these tags (OR logic, works in both V1 and V2)"),
+      allTags: z.array(z.string()).optional().describe("Notes matching ALL of these tags (AND logic). V1 ONLY when 2+ tags — V2 has only OR; multi-tag AND forces V1 fallback path (breaks 2026-07-08)."),
+      archived: z.boolean().optional().describe("Filter by archived status. Default: false (archived notes hidden). Only honored on V2 path; ignored on V1 fallback."),
+      processed: z.boolean().optional().describe("Filter by processed status. Only honored on V2 path; on V1 fallback use the underlying note state."),
       limit: z.number().min(1).max(2000).default(25).describe("Max results (default 25, max 2000)"),
-      pageCursor: z.string().optional().describe("Pagination cursor from previous response"),
+      pageCursor: z.string().optional().describe("Pagination cursor from previous response (path-specific — do not mix V1 and V2 cursors)"),
     },
-    async ({ term, last, createdFrom, createdTo, updatedFrom, updatedTo, featureId, companyId, ownerEmail, source, anyTag, allTags, limit, pageCursor }) => {
+    async ({ term, last, createdFrom, createdTo, updatedFrom, updatedTo, featureId, companyId, ownerEmail, source, anyTag, allTags, archived, processed, limit, pageCursor }) => {
       try {
-        const url = new URL("https://api.productboard.com/notes");
-        if (term) url.searchParams.set("term", term);
-        if (last) url.searchParams.set("last", last);
-        if (createdFrom) url.searchParams.set("createdFrom", createdFrom);
-        if (createdTo) url.searchParams.set("createdTo", createdTo);
-        if (updatedFrom) url.searchParams.set("updatedFrom", updatedFrom);
-        if (updatedTo) url.searchParams.set("updatedTo", updatedTo);
-        if (featureId) url.searchParams.set("feature[id]", featureId);
-        if (companyId) url.searchParams.set("company[id]", companyId);
-        if (ownerEmail) url.searchParams.set("owner[email]", ownerEmail);
-        if (source) url.searchParams.set("source[origin]", source);
-        if (anyTag?.length) for (const t of anyTag) url.searchParams.append("anyTag", t);
-        if (allTags?.length) for (const t of allTags) url.searchParams.append("allTags", t);
-        if (pageCursor) url.searchParams.set("pageCursor", pageCursor);
+        const translatedLast = last ? relativeWindowToIso(last) : null;
+        // V1 fallback only when v2 truly cannot serve the query.
+        // `last` is no longer a fallback trigger if we successfully translated it.
+        const useV1 =
+          !!term ||
+          (last && !translatedLast) ||
+          (allTags?.length ?? 0) > 1;
 
-        const result = await v1PaginatedRequest<V1Note>(url.toString(), undefined, limit);
+        if (useV1) {
+          const url = new URL("https://api.productboard.com/notes");
+          if (term) url.searchParams.set("term", term);
+          if (last) url.searchParams.set("last", last);
+          if (createdFrom) url.searchParams.set("createdFrom", createdFrom);
+          if (createdTo) url.searchParams.set("createdTo", createdTo);
+          if (updatedFrom) url.searchParams.set("updatedFrom", updatedFrom);
+          if (updatedTo) url.searchParams.set("updatedTo", updatedTo);
+          if (featureId) url.searchParams.set("feature[id]", featureId);
+          if (companyId) url.searchParams.set("company[id]", companyId);
+          if (ownerEmail) url.searchParams.set("owner[email]", ownerEmail);
+          if (source) url.searchParams.set("source[origin]", source);
+          if (anyTag?.length) for (const t of anyTag) url.searchParams.append("anyTag", t);
+          if (allTags?.length) for (const t of allTags) url.searchParams.append("allTags", t);
+          if (pageCursor) url.searchParams.set("pageCursor", pageCursor);
+
+          const result = await v1PaginatedRequest<V1Note>(url.toString(), undefined, limit);
+          const v1Warnings: string[] = [
+            "V1 API path used — V1 sunsets on 2026-07-08.",
+          ];
+          if (term) v1Warnings.push("Fulltext `term` is V1-only; V2 has no equivalent yet.");
+          if ((allTags?.length ?? 0) > 1) v1Warnings.push("Multi-tag `allTags` (AND logic) is V1-only; V2 supports OR only.");
+          if (last && !relativeWindowToIso(last)) {
+            v1Warnings.push(`\`last\` value '${last}' did not match the expected format (e.g. '6m', '10d'); pass updatedFrom directly to stay on V2.`);
+          }
+          return toolResult({
+            apiVersion: "v1",
+            notes: result.data,
+            count: result.data.length,
+            totalResults: result.totalResults,
+            nextPageCursor: result.nextPageCursor,
+            _warnings: v1Warnings,
+          });
+        }
+
+        // V2 path — POST /notes/search with structured filter
+        const filter: Record<string, unknown> = {};
+        if (createdFrom || createdTo) {
+          filter.createdAt = {
+            ...(createdFrom ? { from: createdFrom } : {}),
+            ...(createdTo ? { to: createdTo } : {}),
+          };
+        }
+        // Use explicit updatedFrom if given; otherwise fall back to translated `last` window.
+        const effectiveUpdatedFrom = updatedFrom ?? translatedLast ?? undefined;
+        if (effectiveUpdatedFrom || updatedTo) {
+          filter.updatedAt = {
+            ...(effectiveUpdatedFrom ? { from: effectiveUpdatedFrom } : {}),
+            ...(updatedTo ? { to: updatedTo } : {}),
+          };
+        }
+        const fields: Record<string, unknown> = {};
+        if (ownerEmail) fields.owner = [{ email: ownerEmail }];
+        // anyTag and single-element allTags both map to OR tag filter in v2
+        const tags = [...(anyTag ?? []), ...(allTags ?? [])];
+        if (tags.length) fields.tag = tags.map((name) => ({ name }));
+        // Default archived=false unless caller explicitly opts in.
+        fields.archived = archived ?? false;
+        if (processed !== undefined) fields.processed = processed;
+        if (Object.keys(fields).length) filter.fields = fields;
+
+        if (source) filter.metadata = { source: [{ system: source }] };
+
+        const relationships: Record<string, unknown> = {};
+        if (companyId) relationships.customer = [{ id: companyId }];
+        if (featureId) relationships.link = [{ id: featureId }];
+        if (Object.keys(relationships).length) filter.relationships = relationships;
+
+        const body = { data: { filter } };
+
+        // Auto-paginate v2 POST /notes/search up to `limit`
+        const maxItems = limit;
+        const allItems: Note[] = [];
+        let currentPath: string =
+          "/notes/search" + (pageCursor ? `?pageCursor=${encodeURIComponent(pageCursor)}` : "");
+        let lastNext: string | undefined;
+
+        while (allItems.length < maxItems) {
+          const resp = await apiRequest<{ data: Note[]; links?: { next?: string } }>(
+            "POST",
+            currentPath,
+            body
+          );
+          if (resp.data?.length) allItems.push(...resp.data);
+          lastNext = resp.links?.next;
+          if (!lastNext || allItems.length >= maxItems) break;
+          currentPath = lastNext;
+        }
+
+        const trimmed = allItems.slice(0, maxItems);
+        let nextCursor: string | undefined;
+        if (lastNext && allItems.length >= maxItems) {
+          try {
+            nextCursor = new URL(lastNext).searchParams.get("pageCursor") ?? undefined;
+          } catch { /* ignore */ }
+        }
+
+        const v2Warnings: string[] = [];
+        if (translatedLast && !updatedFrom) {
+          v2Warnings.push(
+            `\`last\`='${last}' was translated to updatedFrom='${translatedLast}'. ` +
+              `Prefer passing updatedFrom directly — the V1-style 'last' parameter is being phased out and goes away when V1 sunsets on 2026-07-08.`
+          );
+        }
+
         return toolResult({
-          notes: result.data,
-          count: result.data.length,
-          totalResults: result.totalResults,
-          nextPageCursor: result.nextPageCursor,
+          apiVersion: "v2",
+          notes: trimmed,
+          count: trimmed.length,
+          nextPageCursor: nextCursor,
+          ...(v2Warnings.length ? { _warnings: v2Warnings } : {}),
         });
       } catch (error) {
         return toolError(error);
