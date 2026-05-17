@@ -324,12 +324,16 @@ export function registerNoteTools(server: McpServer) {
     async ({ term, last, createdFrom, createdTo, updatedFrom, updatedTo, featureId, companyId, ownerEmail, source, anyTag, allTags, archived, processed, limit, pageCursor }) => {
       try {
         const translatedLast = last ? relativeWindowToIso(last) : null;
+        const anyTagN = anyTag?.length ?? 0;
+        const allTagsN = allTags?.length ?? 0;
         // V1 fallback only when v2 truly cannot serve the query.
         // `last` is no longer a fallback trigger if we successfully translated it.
+        // allTags+anyTag together (AND + OR in tags) is also v1-only — v2 tag filter is OR-only.
         const useV1 =
           !!term ||
           (last && !translatedLast) ||
-          (allTags?.length ?? 0) > 1;
+          allTagsN > 1 ||
+          (allTagsN > 0 && anyTagN > 0);
 
         if (useV1) {
           const url = new URL("https://api.productboard.com/notes");
@@ -352,7 +356,8 @@ export function registerNoteTools(server: McpServer) {
             "V1 API path used — V1 sunsets on 2026-07-08.",
           ];
           if (term) v1Warnings.push("Fulltext `term` is V1-only; V2 has no equivalent yet.");
-          if ((allTags?.length ?? 0) > 1) v1Warnings.push("Multi-tag `allTags` (AND logic) is V1-only; V2 supports OR only.");
+          if (allTagsN > 1) v1Warnings.push("Multi-tag `allTags` (AND logic) is V1-only; V2 supports OR only.");
+          if (allTagsN > 0 && anyTagN > 0) v1Warnings.push("Combining `allTags` and `anyTag` (AND + OR) is V1-only; V2's tag filter is OR-only.");
           if (last && !relativeWindowToIso(last)) {
             v1Warnings.push(`\`last\` value '${last}' did not match the expected format (e.g. '6m', '10d'); pass updatedFrom directly to stay on V2.`);
           }

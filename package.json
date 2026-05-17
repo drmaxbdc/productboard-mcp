@@ -1,7 +1,7 @@
 {
   "name": "@drmaxbdc/productboard-mcp",
-  "version": "1.0.3",
-  "description": "MCP server for Productboard API — hybrid V1+V2, 30 tools including fulltext search, note comments, and member lookup",
+  "version": "2.0.0",
+  "description": "MCP server for Productboard API v2 — 30 tools for entities, notes, relationships, members, and analytics. V1 retained only as a narrow fallback for two filters; V1 stops working on 2026-07-08.",
   "type": "module",
   "main": "build/index.js",
   "bin": {
