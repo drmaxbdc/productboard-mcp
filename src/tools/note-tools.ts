@@ -272,7 +272,14 @@ export function registerNoteTools(server: McpServer) {
           `/notes/${noteId}/comments`,
           { content }
         );
-        return toolResult(response);
+        return toolResult({
+          ...response,
+          apiVersion: "v1",
+          _warnings: [
+            "V1 API path used — V1 sunsets on 2026-07-08.",
+            "Productboard V2 has no note-comments endpoint as of 2026-05; there is no v2 fallback. If you rely on this tool, plan an alternative before 2026-07-08.",
+          ],
+        });
       } catch (error) {
         return toolError(error);
       }
