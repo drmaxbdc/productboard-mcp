@@ -1,15 +1,16 @@
 # @drmaxbdc/productboard-mcp
 
-MCP server for the [Productboard](https://www.productboard.com/) API. Provides 29 tools covering entities, notes, relationships, configurations, members, and analytics via the Model Context Protocol.
+MCP server for the [Productboard](https://www.productboard.com/) API v2. Provides 30 tools covering entities, notes, relationships, configurations, members, and analytics via the Model Context Protocol.
+
+> **V1 sunset on 2026-07-08.** This package is migrating off Productboard API v1. As of this release `list_notes`, `list_all_notes`, `get_note`, `get_note_v1`, `resolve_note`, and most filters on `search_notes` use v2. The only remaining v1 surfaces are: (a) `search_notes` fulltext (`term`) and multi-tag AND filters — auto-fallback only when used, since v2 has no equivalent; (b) `add_note_comment` — v2 has no note-comments endpoint. Both will stop working on the sunset date and will be removed in the v2.0.0 cleanup.
 
 ## Features
 
-- **Hybrid V1+V2 API** — V1 for rich note search (displayUrl, followers, features), V2 for CRUD operations
-- **29 tools** — entities CRUD+search, notes CRUD+search+relationships, configurations, members, analytics
-- **`search_notes`** — fulltext search with rich response including display URLs and linked features
-- **`resolve_note`** — resolve numeric ID, display URL, or deep link to UUID
-- **`get_note_v1`** — rich note detail with followers, features, owner info
-- **`list_all_notes`** — bulk fetch with auto-pagination for reports
+- **V2-first** — all CRUD plus list/get/search/resolve on notes and entities run on Productboard API v2; v1 used only as a fallback for two specific filters
+- **30 tools** — entities CRUD+search, notes CRUD+search+relationships, configurations, members, analytics
+- **`search_notes`** — hybrid v2/v1 search. v2 by default; falls back to v1 only when fulltext `term` or multi-tag AND (`allTags`) is requested. `last` relative windows translate automatically to v2 `updatedAt.from`. Response carries `apiVersion` so callers know which shape they got.
+- **`resolve_note`** — resolve numeric ID, web UI URL, or deep link to a v2 note
+- **`list_all_notes`** — bulk fetch with auto-pagination via v2 (max 5000)
 - **`list_members`** / **`get_member`** — workspace member lookup
 
 ## Installation
@@ -42,16 +43,18 @@ Generate a token at: Settings > Integrations > Public API in your Productboard w
 
 ## Tools
 
-### Notes (V2 CRUD + V1 search)
-- `list_notes` — list with filters (owner, creator, date range, processed status)
-- `get_note` — get by UUID (V2)
-- `get_note_v1` — get by UUID with rich metadata (V1: displayUrl, followers, features)
-- `search_notes` — fulltext search with time windows, tags, company, feature filters
-- `resolve_note` — resolve any identifier (UUID, numeric ID, URL, deep link) to full note
-- `list_all_notes` — bulk fetch with auto-pagination (max 5000)
+### Notes (V2)
+
+- `list_notes` — list with filters (owner, creator, date range, archived, processed, source). Hides archived notes by default; pass `archived=true` to include.
+- `get_note` — get by UUID
+- `get_note_v1` — **DEPRECATED** alias for `get_note`. Will be removed in v2.0.0.
+- `search_notes` — hybrid v2/v1 search (see Features). Returns `apiVersion` ("v1" or "v2") in the response.
+- `resolve_note` — resolve any identifier (UUID, numeric ID, web UI URL, deep link) to a v2 note. Web UI URL lives at `note.links.html`.
+- `list_all_notes` — bulk fetch via v2 with auto-pagination (max 5000)
 - `create_note` / `update_note` / `delete_note` — CRUD operations
 - `get_note_relationships` / `create_note_relationship` / `delete_note_relationship` — note links
 - `set_note_customer` — set customer relationship on a note
+- `add_note_comment` — **DEPRECATED** (v1-only). V2 has no comments endpoint; this tool stops working on 2026-07-08.
 
 ### Entities (features, objectives, initiatives, etc.)
 - `list_entities` / `get_entity` / `search_entities` — read with filters
