@@ -7,12 +7,12 @@ import type { Note, V1Note } from "../types.js";
 export function registerNoteTools(server: McpServer) {
   server.tool(
     "list_notes",
-    "List Productboard notes (also known as insights) with pagination and optional filters. Sorted by creation date (newest first).",
+    "List Productboard notes (also known as insights) with pagination and optional filters. Sorted by creation date (newest first). DEFAULT: returns processed + unprocessed notes that are NOT archived. To include archived notes set archived=true; to fetch only archived notes set archived=true and omit processed (v2 quirk: archived notes always report processed=false).",
     {
-      archived: z.boolean().optional().describe("Filter by archived status"),
-      processed: z.boolean().optional().describe("Filter by processed status"),
-      ownerEmail: z.string().optional().describe("Filter by owner email"),
-      creatorEmail: z.string().optional().describe("Filter by creator email"),
+      archived: z.boolean().optional().describe("Filter by archived status. Default: false (archived notes are hidden). Set true to include or to fetch only archived notes."),
+      processed: z.boolean().optional().describe("Filter by processed status (true=processed, false=unprocessed). Default: both."),
+      ownerEmail: z.string().optional().describe("Filter by owner email. Requires members:pii:read scope on the access token."),
+      creatorEmail: z.string().optional().describe("Filter by creator email. Requires members:pii:read scope on the access token."),
       createdFrom: z.string().optional().describe("Filter notes created after this ISO 8601 date"),
       createdTo: z.string().optional().describe("Filter notes created before this ISO 8601 date"),
       updatedFrom: z.string().optional().describe("Filter notes updated after this ISO 8601 date"),
@@ -23,19 +23,24 @@ export function registerNoteTools(server: McpServer) {
         .max(500)
         .default(25)
         .describe("Number of results (default 25, max 500)"),
+      sourceSystem: z
+        .string()
+        .optional()
+        .describe("Filter by metadata.source.system (v2 equivalent of v1 source.origin)."),
       sourceRecordId: z
         .string()
         .optional()
-        .describe("Filter by source record ID"),
+        .describe("Filter by metadata.source.recordId"),
       pageCursor: z
         .string()
         .optional()
         .describe("Pagination cursor from previous response"),
     },
-    async ({ archived, processed, ownerEmail, creatorEmail, createdFrom, createdTo, updatedFrom, updatedTo, sourceRecordId, limit, pageCursor }) => {
+    async ({ archived, processed, ownerEmail, creatorEmail, createdFrom, createdTo, updatedFrom, updatedTo, sourceSystem, sourceRecordId, limit, pageCursor }) => {
       try {
         const params: Record<string, string | number | boolean | undefined> = {};
-        if (archived !== undefined) params.archived = archived;
+        // Default: hide archived notes unless caller explicitly opts in.
+        params.archived = archived ?? false;
         if (processed !== undefined) params.processed = processed;
         if (ownerEmail) params["owner[email]"] = ownerEmail;
         if (creatorEmail) params["creator[email]"] = creatorEmail;
@@ -43,7 +48,8 @@ export function registerNoteTools(server: McpServer) {
         if (createdTo) params.createdTo = createdTo;
         if (updatedFrom) params.updatedFrom = updatedFrom;
         if (updatedTo) params.updatedTo = updatedTo;
-        if (sourceRecordId) params["source[recordId]"] = sourceRecordId;
+        if (sourceSystem) params["metadata[source][system]"] = sourceSystem;
+        if (sourceRecordId) params["metadata[source][recordId]"] = sourceRecordId;
         if (pageCursor) params.pageCursor = pageCursor;
 
         const result = await paginatedRequest<Note>("/notes", params, limit);
@@ -326,31 +332,44 @@ export function registerNoteTools(server: McpServer) {
 
   server.tool(
     "list_all_notes",
-    "Bulk-fetch all Productboard notes using V1 API with auto-pagination. Returns rich V1 response with displayUrl. Safety limit: 5000 notes max. Use for daily reports or full exports.",
+    "Bulk-fetch Productboard notes via V2 API with auto-pagination (~100/page). Safety limit: 5000 notes max. DEFAULT: returns processed + unprocessed notes that are NOT archived. To include archived notes set archived=true. V2 response shape: each note has top-level {id, type, links{self,html}, fields{...}, relationships{...}, createdAt, updatedAt, metadata}. NOTE: v2 no longer returns followers[], embedded comments, totalResults, or features[].importance. Use links.html in place of v1 displayUrl. Linked features are now under /notes/{id}/relationships (not inline) — use get_note_relationships per note if you need them.",
     {
-      createdFrom: z.string().optional().describe("ISO 8601 date — notes created after"),
-      createdTo: z.string().optional().describe("ISO 8601 date — notes created before"),
-      updatedFrom: z.string().optional().describe("ISO 8601 date — notes updated after"),
-      updatedTo: z.string().optional().describe("ISO 8601 date — notes updated before"),
-      ownerEmail: z.string().optional().describe("Filter by owner email"),
-      processed: z.boolean().optional().describe("Filter by processed status"),
+      createdFrom: z.string().optional().describe("ISO 8601 date-time — notes created on/after (inclusive)"),
+      createdTo: z.string().optional().describe("ISO 8601 date-time — notes created on/before (inclusive)"),
+      updatedFrom: z.string().optional().describe("ISO 8601 date-time — notes updated on/after (inclusive)"),
+      updatedTo: z.string().optional().describe("ISO 8601 date-time — notes updated on/before (inclusive)"),
+      ownerEmail: z.string().optional().describe("Filter by owner email. Requires members:pii:read scope on the access token."),
+      processed: z
+        .boolean()
+        .optional()
+        .describe("Filter by processed status (true=processed, false=unprocessed). Default: both."),
+      archived: z.boolean().optional().describe("Filter by archived status. Default: false (archived notes are hidden). Set true to include or to fetch only archived notes."),
+      sourceSystem: z
+        .string()
+        .optional()
+        .describe("Filter by metadata.source.system (v2 equivalent of v1 source.origin). NOTE: source metadata may be empty during the v1→v2 transition; use only if you've verified data is populated for your workspace."),
+      sourceRecordId: z.string().optional().describe("Filter by metadata.source.recordId."),
       limit: z.number().min(1).max(5000).default(5000).describe("Safety limit (default 5000)"),
     },
-    async ({ createdFrom, createdTo, updatedFrom, updatedTo, ownerEmail, processed, limit }) => {
+    async ({ createdFrom, createdTo, updatedFrom, updatedTo, ownerEmail, processed, archived, sourceSystem, sourceRecordId, limit }) => {
       try {
-        const url = new URL("https://api.productboard.com/notes");
-        if (createdFrom) url.searchParams.set("createdFrom", createdFrom);
-        if (createdTo) url.searchParams.set("createdTo", createdTo);
-        if (updatedFrom) url.searchParams.set("updatedFrom", updatedFrom);
-        if (updatedTo) url.searchParams.set("updatedTo", updatedTo);
-        if (ownerEmail) url.searchParams.set("owner[email]", ownerEmail);
-        if (processed !== undefined) url.searchParams.set("state", processed ? "processed" : "unprocessed");
+        const params: Record<string, string | number | boolean | undefined> = {};
+        if (createdFrom) params.createdFrom = createdFrom;
+        if (createdTo) params.createdTo = createdTo;
+        if (updatedFrom) params.updatedFrom = updatedFrom;
+        if (updatedTo) params.updatedTo = updatedTo;
+        if (ownerEmail) params["owner[email]"] = ownerEmail;
+        if (sourceSystem) params["metadata[source][system]"] = sourceSystem;
+        if (sourceRecordId) params["metadata[source][recordId]"] = sourceRecordId;
 
-        const result = await v1PaginatedRequest<V1Note>(url.toString(), undefined, limit);
+        // Default: hide archived notes unless caller explicitly opts in.
+        params.archived = archived ?? false;
+        if (processed !== undefined) params.processed = processed;
+
+        const result = await paginatedRequest<Note>("/notes", params, limit);
         return toolResult({
           notes: result.data,
           count: result.data.length,
-          totalResults: result.totalResults,
           nextPageCursor: result.nextPageCursor,
         });
       } catch (error) {
@@ -361,13 +380,13 @@ export function registerNoteTools(server: McpServer) {
 
   server.tool(
     "get_note_v1",
-    "Get a Productboard note with rich V1 response: displayUrl, followers, linked features, full owner info. Use this when you need the display URL or detailed metadata.",
+    "DEPRECATED: use get_note instead. Kept as an alias for backwards compatibility during the V1→V2 migration. Now calls v2 GET /notes/{id} (same as get_note). V1-only fields no longer available: followers[], embedded comments[], features[].importance. The v1 displayUrl is now exposed as links.html on the returned note. This tool will be removed in v2.0.0.",
     {
       id: z.string().describe("Note UUID"),
     },
     async ({ id }) => {
       try {
-        const response = await v1ApiRequest<{ data: V1Note }>("GET", `/notes/${id}`);
+        const response = await apiRequest<{ data: Note }>("GET", `/notes/${id}`);
         return toolResult(response.data ?? response);
       } catch (error) {
         return toolError(error);
@@ -377,16 +396,16 @@ export function registerNoteTools(server: McpServer) {
 
   server.tool(
     "resolve_note",
-    "Resolve a ProductBoard note from any identifier: UUID, numeric ID, display URL, or deep link. Returns the full V1 note with displayUrl. For numeric IDs, scans up to 500 recent notes — may take a few seconds.",
+    "Resolve a Productboard note from any identifier: UUID, numeric ID, web UI URL, or deep link. Returns the v2 note (with links.html — the web UI URL, equivalent to v1 displayUrl). For numeric IDs, scans up to 500 most-recent notes (~5 pages) matching against links.html. Includes archived notes in the scan.",
     {
-      identifier: z.string().describe("UUID, numeric ID (e.g. '54080737'), display URL, or deep link (?d=notes%2F...)"),
+      identifier: z.string().describe("UUID, numeric ID (e.g. '54080737'), web UI URL, or deep link (?d=notes%2F...)"),
     },
     async ({ identifier }) => {
       try {
-        // UUID — direct lookup
+        // UUID — direct v2 lookup
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (uuidRegex.test(identifier)) {
-          const response = await v1ApiRequest<{ data: V1Note }>("GET", `/notes/${identifier}`);
+          const response = await apiRequest<{ data: Note }>("GET", `/notes/${identifier}`);
           return toolResult(response.data ?? response);
         }
 
@@ -413,38 +432,23 @@ export function registerNoteTools(server: McpServer) {
 
         if (!numericId) {
           return toolError(new Error(
-            `Cannot parse identifier: "${identifier}". Expected UUID, numeric ID, display URL, or deep link.`
+            `Cannot parse identifier: "${identifier}". Expected UUID, numeric ID, web UI URL, or deep link.`
           ));
         }
 
-        // Scan pages to find note by numeric ID in displayUrl
+        // Scan v2 listnotes for a note whose links.html contains /notes/{numericId}.
+        // v2 has no direct URL/numeric-ID filter, so scan recent pages. Don't filter
+        // archived — the caller may be trying to resolve an archived note.
         const targetPattern = `/notes/${numericId}`;
-        const MAX_PAGES = 5;
-        let pageCursor: string | undefined;
-
-        for (let page = 0; page < MAX_PAGES; page++) {
-          const url = new URL("https://api.productboard.com/notes");
-          url.searchParams.set("pageLimit", "100");
-          if (pageCursor) url.searchParams.set("pageCursor", pageCursor);
-
-          const response = await v1ApiRequest<{
-            data: V1Note[];
-            pageCursor?: string;
-          }>("GET", url.toString());
-
-          const match = response.data?.find((n) =>
-            n.displayUrl?.includes(targetPattern)
-          );
-          if (match) {
-            return toolResult({ ...match, numericId });
-          }
-
-          if (!response.pageCursor) break;
-          pageCursor = response.pageCursor;
+        const MAX_NOTES = 500;
+        const scan = await paginatedRequest<Note>("/notes", undefined, MAX_NOTES);
+        const match = scan.data.find((n) => n.links?.html?.includes(targetPattern));
+        if (match) {
+          return toolResult({ ...match, numericId });
         }
 
         return toolError(new Error(
-          `Note with numeric ID ${numericId} not found within ${MAX_PAGES * 100} most recent notes. Try using the UUID instead.`
+          `Note with numeric ID ${numericId} not found within ${MAX_NOTES} most recent notes. Try using the UUID instead.`
         ));
       } catch (error) {
         return toolError(error);

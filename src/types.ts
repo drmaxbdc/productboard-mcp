@@ -44,7 +44,16 @@ export interface Relationship {
 export interface Note {
   id: string;
   type: string;
+  links?: {
+    self?: string;
+    html?: string;
+  };
   fields: Record<string, unknown>;
+  relationships?: {
+    data?: Array<{ type: string; target: { id: string; type: string; links?: { self?: string; html?: string } } }>;
+    links?: { next?: string };
+  };
+  metadata?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
 }
