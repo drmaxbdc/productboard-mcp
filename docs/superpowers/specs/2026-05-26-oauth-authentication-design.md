@@ -594,3 +594,26 @@ If PB ever rejects the stored `client_id` (the user manually revoked the app in 
 The pre-pivot implementation (commits `259c25c` through `414978c` on this branch) already handles 90% of what's needed. The pivot is additive: insert a registration step before the existing setup flow, and remove the `DEFAULT_OAUTH_CLIENT_ID` empty-check path. Roughly two additional tasks (oauth-register module + resolver refactor), plus a docs revision.
 
 The body of this design document above describes the pre-pivot architecture. The implementation reflects the pivoted architecture per the addendum. Where the two disagree, the addendum wins.
+
+---
+
+## Addendum 2 (2026-05-27 evening): upstream `/oauth2/register` returns 404 in production
+
+The 2.0.1 build, published 2026-05-27 afternoon, was smoke-tested same day. Result: the dynamic-registration step fails. `POST https://app.productboard.com/oauth2/register` returns HTTP 404 in production via Kong gateway with no backend wired. The endpoint is documented at [oauth-public-client.md](https://developer.productboard.com/reference/oauth-public-client.md) and is supposed to follow RFC 7591, but no plausible URL variant or auth-header combination yielded a non-404.
+
+A support ticket has been filed with Productboard. Pending their fix:
+
+- **2.0.2 hotfix** re-introduces the manual-registration model. The Dr.Max admin manually registers one OAuth app in [https://app.productboard.com/oauth2/applications](https://app.productboard.com/oauth2/applications), captures the issued `client_id`, and we embed it in `src/auth/types.ts` as `DEFAULT_OAUTH_CLIENT_ID`. Non-Dr.Max consumers override via the existing `PRODUCTBOARD_OAUTH_CLIENT_ID` env var.
+- **The dynamic-registration code path is retained.** `oauth-register.ts` continues to call `POST /oauth2/register` as a last resort in the resolver priority chain. When Productboard resolves the upstream bug, the code will start using dynamic registration automatically — no further change required from us.
+- **404-specific error message.** `registerClient()` now detects HTTP 404 specifically and produces a long, actionable message that walks the user through manual registration. Other error paths unchanged.
+- **Priority chain post-2.0.2:**
+
+  ```
+  PRODUCTBOARD_OAUTH_CLIENT_ID env override
+    → registration.json on disk
+      → tokens.json recovery (read clientId field)
+        → DEFAULT_OAUTH_CLIENT_ID (embedded Dr.Max)
+          → registerClient() — last resort, currently 404
+  ```
+
+The body of this design document above describes the pre-hotfix architecture (where dynamic registration was the primary path). Where it disagrees with Addendum 2, Addendum 2 wins.
