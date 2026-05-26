@@ -511,7 +511,7 @@ export function registerNoteTools(server: McpServer) {
 
   server.tool(
     "get_note_v1",
-    "DEPRECATED: use get_note instead. Kept as an alias for backwards compatibility during the V1→V2 migration. Now calls v2 GET /notes/{id} (same as get_note). V1-only fields no longer available: followers[], embedded comments[], features[].importance. The v1 displayUrl is now exposed as links.html on the returned note. This tool will be removed in v2.0.0.",
+    "DEPRECATED: use get_note instead. Kept as an alias for backwards compatibility during the V1→V2 migration. Now calls v2 GET /notes/{id} (same as get_note). V1-only fields no longer available: followers[], embedded comments[], features[].importance. The v1 displayUrl is now exposed as links.html on the returned note. This tool will be removed in the next major release (v2.0.0-cleanup, after the V1 sunset on 2026-07-08).",
     {
       id: z.string().describe("Note UUID"),
     },
@@ -568,8 +568,10 @@ export function registerNoteTools(server: McpServer) {
         }
 
         // Scan v2 listnotes for a note whose links.html contains /notes/{numericId}.
-        // v2 has no direct URL/numeric-ID filter, so scan recent pages. Don't filter
-        // archived — the caller may be trying to resolve an archived note.
+        // v2 has no direct URL/numeric-ID filter, so scan recent pages. Don't pass
+        // `archived` — Productboard's v2 GET /notes default (when the param is omitted)
+        // returns BOTH archived and non-archived; passing `archived=true` would
+        // strict-filter to archived-only and miss the common case.
         const targetPattern = `/notes/${numericId}`;
         const MAX_NOTES = 500;
         const scan = await paginatedRequest<Note>("/notes", undefined, MAX_NOTES);

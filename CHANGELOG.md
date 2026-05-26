@@ -72,6 +72,18 @@ query, and clearly flags the few surfaces with no v2 equivalent.
   `V1Note` type) remain in [src/api/client.ts](src/api/client.ts) for the
   narrow `search_notes` v1 fallback and `add_note_comment`. These will be
   deleted in the v2.0.0-cleanup release once v1 sunsets.
+- MCP server `version` field bumped to `"2.0.0"` so clients querying server
+  capabilities see the published version.
+- `search_entities` tool description now warns that the `name` filter is
+  currently ignored by Productboard's upstream `POST /entities/search`
+  (verified 2026-05). Callers needing name-based search should use
+  `list_entities` (its `name` filter works as a partial match).
+- Removed unused `PatchOperation` / `SearchFilter` / `MemberActivity`
+  interfaces from `src/types.ts`.
+- Clarified the `resolve_note` scan: it intentionally omits the `archived`
+  parameter because Productboard's v2 default returns both archived and
+  non-archived notes (passing `archived=true` would strict-filter to
+  archived-only).
 
 ### Migration notes for callers
 

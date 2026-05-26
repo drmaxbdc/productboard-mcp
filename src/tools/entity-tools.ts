@@ -244,7 +244,7 @@ export function registerEntityTools(server: McpServer) {
 
   server.tool(
     "search_entities",
-    "Search Productboard entities using POST with complex filters. Supports filtering by types, name, statuses, owners, parent, archived, and specific IDs. More powerful than list_entities for complex queries.",
+    "Search Productboard entities using POST with complex filters. Supports filtering by types, statuses, owners, parent, archived, and specific IDs. For name-based search use list_entities (its `name` filter does partial match and works reliably); the `name` filter here is forwarded to Productboard's API but is currently ignored by it (upstream issue, verified 2026-05).",
     {
       types: z
         .array(z.enum(ENTITY_TYPES))
@@ -253,7 +253,7 @@ export function registerEntityTools(server: McpServer) {
       name: z
         .string()
         .optional()
-        .describe("Filter by entity name"),
+        .describe("Filter by entity name. WARNING: Productboard's POST /entities/search currently ignores this filter (verified 2026-05). Use list_entities for name-based search."),
       archived: z
         .boolean()
         .optional()

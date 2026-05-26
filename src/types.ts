@@ -69,23 +69,6 @@ export interface ApiError {
   details?: unknown;
 }
 
-export interface PatchOperation {
-  op: "set" | "addItems" | "removeItems" | "clear";
-  field: string;
-  value?: unknown;
-}
-
-export interface SearchFilter {
-  field: string;
-  operator: string;
-  value: unknown;
-}
-
-export interface MemberActivity {
-  memberId: string;
-  activity: Record<string, unknown>;
-}
-
 // ── V1 API types ────────────────────────────────────────────────────────
 
 export interface V1Note {
