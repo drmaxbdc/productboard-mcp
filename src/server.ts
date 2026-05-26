@@ -11,7 +11,7 @@ import { registerMemberTools } from "./tools/member-tools.js";
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "productboard",
-    version: "2.0.0",
+    version: "2.1.0",
   });
 
   // Register all tool groups
