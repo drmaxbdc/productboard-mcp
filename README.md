@@ -25,9 +25,13 @@ This MCP supports two auth paths. **OAuth (default)** is recommended for fresh i
 
 ### OAuth 2.0 (recommended)
 
-When neither `PRODUCTBOARD_ACCESS_TOKEN` nor a stored registration exists, the MCP server self-registers as a Productboard Public Client (RFC 7591 Dynamic Client Registration) at first start, then opens a browser to a local scope-chooser page (Read only / Read + Write / Full access), redirects to Productboard for consent, and persists the resulting access + refresh tokens to a platform-native cache directory.
+When neither `PRODUCTBOARD_ACCESS_TOKEN` nor a stored OAuth state exists, the MCP server runs the Productboard OAuth Authorization Code flow with PKCE at first start. The resulting access + refresh tokens are persisted to a platform-native cache directory and refreshed automatically.
 
-The dynamically registered `client_id` is saved to `registration.json` alongside the tokens. This means each MCP installation gets its own OAuth grant scoped to the authenticating user's workspace — no shared client_id across users, and the package works out-of-the-box for any Productboard workspace without prior app registration.
+Each MCP installation needs an OAuth `client_id` to drive the flow. Three sources, checked in this order:
+
+1. **`PRODUCTBOARD_OAUTH_CLIENT_ID` env var** — explicit per-consumer override (see below).
+2. **Embedded Dr.Max default `client_id`** — baked into the package at build time. Dr.Max users get OAuth working out of the box with zero config; non-Dr.Max consumers should override (the Dr.Max app's consent screen says "Dr.Max BDC", which is confusing for unrelated workspaces).
+3. **Dynamic Client Registration (`POST /oauth2/register`)** — documented at [developer.productboard.com/reference/oauth-public-client](https://developer.productboard.com/reference/oauth-public-client.md). **Currently returns HTTP 404 in production** — known upstream bug. The code still attempts it as a last resort; if/when Productboard fixes the endpoint, this becomes the zero-config path for any consumer.
 
 Storage locations:
 
@@ -37,19 +41,36 @@ Storage locations:
 | Linux | `${XDG_CONFIG_HOME:-$HOME/.config}/productboard-mcp/{tokens.json, registration.json}` |
 | Windows | `%APPDATA%\productboard-mcp\{tokens.json, registration.json}` |
 
-Tokens are written with permissions `0600` (POSIX). Refresh is automatic — access tokens are renewed 5 minutes before expiry, and refresh tokens (180-day validity) rotate on every use. The refresh-token grace window in PB's OAuth implementation handles multi-process token contention safely.
+Tokens are written with permissions `0600` (POSIX). Refresh is automatic — access tokens are renewed 5 minutes before expiry, and refresh tokens (180-day validity) rotate on every use.
 
-If you need to start setup over (change scope, switch to a different PB workspace, etc.), delete `tokens.json` and restart the MCP. To also re-register the OAuth client (rarely needed — e.g., if the registered app was revoked in PB admin), delete `registration.json` as well.
+If you need to start setup over (change scope, switch to a different PB workspace, etc.), delete `tokens.json` and restart the MCP. To also force a new `client_id` resolution, delete `registration.json` as well.
+
+#### Registering your own OAuth app (non-Dr.Max consumers)
+
+Until Productboard's Dynamic Client Registration endpoint comes online, non-Dr.Max workspaces need a manually registered OAuth app:
+
+1. Sign in to Productboard as an admin and open [https://app.productboard.com/oauth2/applications](https://app.productboard.com/oauth2/applications).
+2. Click **New OAuth application** and pick **Public Client Self-registered**.
+3. Fill in the form. Critical fields:
+   - **Redirect URI:** `http://127.0.0.1:7779/callback`. If you change `PRODUCTBOARD_OAUTH_CALLBACK_PORT`, also re-register the matching URL here.
+   - **API V2 Scopes:** check whichever subset your team needs. For the full MCP tool surface check all 8: `entities:read`, `entities:write`, `entities:delete`, `notes:read`, `notes:write`, `notes:delete`, `analytics:read`, `members_pii:read`.
+   - **API V1 Scopes:** leave empty (V1 sunsets 2026-07-08; OAuth was never wired to V1).
+4. Save and copy the issued `client_id`.
+5. Set the env var and restart:
+
+   ```bash
+   export PRODUCTBOARD_OAUTH_CLIENT_ID='paste-your-client-id-here'
+   ```
 
 #### Optional env vars
 
 | Env var | Default | Purpose |
 | --- | --- | --- |
 | `PRODUCTBOARD_AUTH_MODE` | (unset = auto) | Set to `oauth` to force OAuth even if `PRODUCTBOARD_ACCESS_TOKEN` is set; set to `pat` to require PAT (good for CI). |
-| `PRODUCTBOARD_OAUTH_CLIENT_ID` | (self-registers) | Advanced: bypass self-registration by providing your own pre-registered OAuth app's `client_id`. Register at [https://app.productboard.com/oauth2/applications](https://app.productboard.com/oauth2/applications). Most users don't need this. |
-| `PRODUCTBOARD_OAUTH_CALLBACK_PORT` | `7779` | Override the callback port. Also re-register the matching `http://127.0.0.1:<port>/callback` URI if you're using your own pre-registered OAuth app. |
+| `PRODUCTBOARD_OAUTH_CLIENT_ID` | (embedded Dr.Max) | Your own OAuth app's client_id. Required for non-Dr.Max consumers until Productboard's dynamic registration endpoint works. |
+| `PRODUCTBOARD_OAUTH_CALLBACK_PORT` | `7779` | Override the callback port. Re-register the matching `http://127.0.0.1:<port>/callback` URI in your OAuth app. |
 | `PRODUCTBOARD_OAUTH_TOKEN_PATH` | (platform-native, see above) | Override the tokens.json location (e.g. for Docker volumes). |
-| `PRODUCTBOARD_OAUTH_REGISTRATION_PATH` | (platform-native, see above) | Override the registration.json location (e.g. for Docker volumes). |
+| `PRODUCTBOARD_OAUTH_REGISTRATION_PATH` | (platform-native, see above) | Override the registration.json location. |
 | `PRODUCTBOARD_OAUTH_SCOPES` | (chooser shown) | Space- or comma-separated scopes. Set this to bypass the chooser page. |
 
 ### Personal Access Token (PAT, fallback)
