@@ -19,11 +19,51 @@ MCP server for the [Productboard](https://www.productboard.com/) API v2. Provide
 npx -y @drmaxbdc/productboard-mcp
 ```
 
+## Authentication
+
+This MCP supports two auth paths. **OAuth (default)** is recommended for fresh installs; **PAT (fallback)** is fully supported for back-compat and headless / CI use.
+
+### OAuth 2.0 (recommended)
+
+When neither `PRODUCTBOARD_ACCESS_TOKEN` nor `tokens.json` exists, the MCP server opens a browser on first start to a local scope-chooser page (Read only / Read + Write / Full access), redirects to Productboard for consent, and persists the resulting access + refresh tokens to a platform-native cache directory:
+
+| OS | Path |
+| --- | --- |
+| macOS | `~/Library/Application Support/productboard-mcp/tokens.json` |
+| Linux | `${XDG_CONFIG_HOME:-$HOME/.config}/productboard-mcp/tokens.json` |
+| Windows | `%APPDATA%\productboard-mcp\tokens.json` |
+
+Tokens are written with permissions `0600` (POSIX). Refresh is automatic — access tokens are renewed 5 minutes before expiry, and refresh tokens (180-day validity) rotate on every use. The refresh-token grace window in PB's OAuth implementation handles multi-process token contention safely.
+
+If you need to start setup over (change scope, switch to a different PB workspace, etc.), delete `tokens.json` and restart the MCP.
+
+#### Optional env vars
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `PRODUCTBOARD_AUTH_MODE` | (unset = auto) | Set to `oauth` to force OAuth even if `PRODUCTBOARD_ACCESS_TOKEN` is set; set to `pat` to require PAT (good for CI). |
+| `PRODUCTBOARD_OAUTH_CLIENT_ID` | (Dr.Max embedded) | Override with your own OAuth app's client_id if you're outside the Dr.Max Productboard workspace. Register an app at [https://app.productboard.com/oauth2/applications](https://app.productboard.com/oauth2/applications). |
+| `PRODUCTBOARD_OAUTH_CALLBACK_PORT` | `7779` | Override the callback port. Also re-register the matching `http://127.0.0.1:<port>/callback` URI in your OAuth app. |
+| `PRODUCTBOARD_OAUTH_TOKEN_PATH` | (platform-native, see above) | Override the tokens.json location (e.g. for Docker volumes). |
+| `PRODUCTBOARD_OAUTH_SCOPES` | (chooser shown) | Space- or comma-separated scopes. Set this to bypass the chooser page. |
+
+### Personal Access Token (PAT, fallback)
+
+Generate a PAT in Productboard at Settings → Integrations → Public API. Then set:
+
+```bash
+export PRODUCTBOARD_ACCESS_TOKEN='your-pat-here'
+```
+
+When this env var is set, the MCP uses PAT auth and does not run the OAuth flow. PAT is the right choice for:
+
+- Headless environments (CI, Docker containers without a browser, SSH-only servers)
+- Backwards compatibility with existing deployments that already provision the env var
+- Quick local development / debugging
+
+PATs do not expire on their own but can be revoked by your PB admin at any time. If your PAT stops working mid-session, the MCP surfaces a structured "switch to OAuth" hint so you know how to recover.
+
 ## Configuration
-
-Set the `PRODUCTBOARD_ACCESS_TOKEN` environment variable to your Productboard Personal Access Token.
-
-Generate a token at: Settings > Integrations > Public API in your Productboard workspace.
 
 ### Claude Code (claude.json)
 

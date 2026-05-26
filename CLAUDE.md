@@ -84,6 +84,37 @@ All remaining V1 calls live in [src/tools/note-tools.ts](src/tools/note-tools.ts
 | `search_notes`     | Hybrid                                                   | **Migrated as hybrid** — routes to v2 `POST /notes/search` by default. Falls back to v1 only when `term` (fulltext) is set or `allTags` has 2+ tags (v2 supports neither). `last` relative-window strings are translated to v2 `updatedAt.from`. v1 fallback dies at sunset; if those two filters aren't used at sunset, the v1 helpers can be deleted. Response includes `apiVersion` (`"v1"` or `"v2"`) so callers know which shape they got. |
 | `add_note_comment` | `POST /notes/{id}/comments`                              | **Deprecated, no v2 path** — confirmed no v2 comments endpoint via 404 probes + changelog audit (2026-05-06). Tool description warns of 2026-07-08 hard cutoff. Will be removed in v2.0.0 cleanup commit.                              |
 
+## Authentication
+
+The MCP supports two auth modes. They share the same `apiRequest()` entry point but resolve Bearer tokens differently.
+
+**PAT mode** (`PRODUCTBOARD_ACCESS_TOKEN` env var set, OR `PRODUCTBOARD_AUTH_MODE=pat`): Sync env-var read, no refresh, no recovery on 401 — surface a structured "switch to OAuth" hint instead.
+
+**OAuth mode** (default when no PAT env var, OR `PRODUCTBOARD_AUTH_MODE=oauth`): On first start, opens a browser to a local scope chooser at `http://127.0.0.1:7779/`, then PB authorize, then exchanges the returned code for tokens. Tokens persist to `~/Library/Application Support/productboard-mcp/tokens.json` (macOS path; see [src/auth/token-store.ts](src/auth/token-store.ts) for Linux/Windows). Refresh happens proactively 5 minutes before expiry and reactively on 401.
+
+**Priority tree** (in [src/auth/resolver.ts](src/auth/resolver.ts)):
+
+1. `PRODUCTBOARD_AUTH_MODE=oauth` → OAuth (ignore PAT env)
+2. `PRODUCTBOARD_AUTH_MODE=pat` → PAT (require env var)
+3. Otherwise: `PRODUCTBOARD_ACCESS_TOKEN` set → PAT; `tokens.json` exists → OAuth; neither → trigger OAuth setup
+
+**Code organization:**
+
+- [src/auth/types.ts](src/auth/types.ts) — types, scope presets, constants (timeouts, default port, PB endpoints, placeholder client_id)
+- [src/auth/token-store.ts](src/auth/token-store.ts) — read/atomic-write of tokens.json with `0600` perms
+- [src/auth/oauth-refresh.ts](src/auth/oauth-refresh.ts) — proactive + reactive refresh, retry/backoff, `invalid_grant` hard error
+- [src/auth/oauth-setup.ts](src/auth/oauth-setup.ts) — PKCE, local HTTP listener with `/`, `/start`, `/callback` routes, scope chooser HTML, browser launch
+- [src/auth/resolver.ts](src/auth/resolver.ts) — priority tree, env-var validation, exposes `createAuthResolution()`
+- [src/api/client.ts](src/api/client.ts) — calls `requireResolution().getBearer()` instead of reading env directly; 401 handler does forceRefresh + retry-once in OAuth mode
+
+**Bearer validation.** All Bearer values are cleaned of CR/LF and trimmed in `buildHeaders()` before assembly. This prevents the "PAT label + newline" mishap (which once leaked a token into an HTTP-header-validation error response). If a token contains illegal chars, the server throws a clear error before making the request — the token does not appear in any log.
+
+**Don't.**
+
+- Don't reach for `process.env.PRODUCTBOARD_ACCESS_TOKEN` outside the resolver. Always go through `requireResolution().getBearer()`.
+- Don't log Bearer values. The cleanup in `buildHeaders()` is defense-in-depth, not a license to log freely.
+- Don't add a synchronous "block until OAuth setup completes" path in `getBearer()`. The MCP initialize handshake must complete in sub-second; if setup is pending, return the structured "pending" error and let the caller retry.
+
 ## Conventions
 
 **Commits.** Short imperative subject, version bump suffixed in parens when releasing (e.g. `Fix fields param, teams addItems workaround, add note comments (v1.0.3)`). Body optional; not Conventional Commits.

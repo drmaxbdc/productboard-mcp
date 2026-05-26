@@ -5,6 +5,36 @@ All notable changes to `@drmaxbdc/productboard-mcp` are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] — 2026-05-26
+
+Adds OAuth 2.0 Authorization Code flow (with PKCE) as a second authentication option alongside the existing Personal Access Token (PAT) path. Both paths are first-class and fully supported; OAuth is preferred for fresh installs because it offers rotation, per-user audit trail, and browser-based onboarding instead of admin-issued tokens.
+
+### Added
+
+- **OAuth 2.0 authentication.** First-run setup opens a browser-based scope chooser (Read only / Read+Write / Full), then the standard Productboard authorize-and-consent flow. Tokens are persisted to the platform-native cache directory with file perms `0600` and refreshed proactively (5-minute buffer before expiry) and reactively (one retry after a 401). The 60-minute refresh-token grace window in Productboard's OAuth implementation is leveraged to handle multi-process token contention without explicit file locking.
+- **`PRODUCTBOARD_AUTH_MODE` env var.** Optional. `oauth` forces OAuth even if `PRODUCTBOARD_ACCESS_TOKEN` is set; `pat` requires the env var. Unset → auto (priority tree: PAT env > OAuth tokens.json > setup flow).
+- **`PRODUCTBOARD_OAUTH_CLIENT_ID` env var.** Optional override of the embedded Dr.Max OAuth client_id (for non-Dr.Max consumers who register their own OAuth app).
+- **`PRODUCTBOARD_OAUTH_CALLBACK_PORT` env var.** Optional override of the default `7779` callback port (also re-register the new URL in your PB OAuth app).
+- **`PRODUCTBOARD_OAUTH_TOKEN_PATH` env var.** Optional override of the tokens.json location (Docker volumes, multi-tenant test setups).
+- **`PRODUCTBOARD_OAUTH_SCOPES` env var.** Optional space- or comma-separated list of scopes; bypasses the chooser page.
+
+### Changed
+
+- **`apiRequest` / `v1ApiRequest` are now Bearer-source-agnostic.** They consult an injected `AuthResolution` instead of reading `PRODUCTBOARD_ACCESS_TOKEN` directly. PAT mode preserves the previous behavior byte-for-byte.
+- **HTTP 401 now triggers a refresh+retry once** in OAuth mode, or a structured "switch to OAuth" hint in PAT mode (instead of a raw `Bad token` error).
+- **Bearer values are now validated client-side** before assembling the Authorization header: leading/trailing whitespace and embedded CR/LF are rejected with a clean error. This prevents the kind of "Productboard PAT label + newline pasted into env" mishap from echoing the token back in an HTTP-header-validation exception.
+
+### Internal
+
+- New `src/auth/` directory: `types.ts`, `token-store.ts`, `oauth-setup.ts`, `oauth-refresh.ts`, `resolver.ts`.
+- No new npm dependencies. PKCE uses Node's `crypto`; the callback listener uses Node's `http`; browser launch uses `child_process.spawn`.
+
+### Migration notes for callers
+
+- **Nothing breaks.** Existing deployments with `PRODUCTBOARD_ACCESS_TOKEN` set continue to use PAT auth unchanged.
+- **Fresh installs without an env var** will see a browser open at first start. Users complete the scope chooser + authorize once; tokens persist across restarts and refresh automatically.
+- **Dr.Max tars users:** the new package version will be picked up by `roles.json`; the OAuth migration happens in tars in a separate phased rollout (see the design spec).
+
 ## [2.0.0] — 2026-05-17
 
 Migration release for Productboard's REST API v2. Productboard sunsets v1 on
