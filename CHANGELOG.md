@@ -5,6 +5,29 @@ All notable changes to `@drmaxbdc/productboard-mcp` are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] — 2026-05-27
+
+Hotfix: makes OAuth usable today by embedding a Dr.Max-registered `client_id` as the default, working around an upstream Productboard bug in `POST /oauth2/register` that returns HTTP 404 in production. The dynamic-registration code path is unchanged and will start working automatically the day Productboard fixes the endpoint.
+
+### Added
+
+- **Embedded `DEFAULT_OAUTH_CLIENT_ID`** in `src/auth/types.ts` pointing at Dr.Max's OAuth application registered manually at [https://app.productboard.com/oauth2/applications](https://app.productboard.com/oauth2/applications). Used as the default when no `PRODUCTBOARD_OAUTH_CLIENT_ID` env override and no stored `registration.json` exist.
+- **Resolver priority chain extended** to check `DEFAULT_OAUTH_CLIENT_ID` after disk-recovery and before falling back to dynamic registration. The chosen `client_id` is persisted to `registration.json` so subsequent starts skip the chain.
+
+### Changed
+
+- **`registerClient()` 404 handling** now surfaces a long, actionable message: how to register an OAuth app manually in PB admin UI, what redirect URI to use, what scopes to pick, and which env var to export. Replaces the previous generic config_invalid error that exposed only the upstream response body.
+
+### Known issues (upstream)
+
+- **Productboard's Dynamic Client Registration endpoint (`POST /oauth2/register`) returns HTTP 404** in production (Kong gateway, no backend wired). The endpoint is documented at [oauth-public-client.md](https://developer.productboard.com/reference/oauth-public-client.md). A support ticket has been filed. When upstream resolves, this MCP will use dynamic registration automatically — no code change needed.
+
+### Migration notes for callers
+
+- **Nothing breaks for PAT users.** PAT mode is unaffected.
+- **Dr.Max users on tars:** after `roles.json` is bumped to 2.0.2, OAuth setup works out of the box (embedded Dr.Max client_id, then chooser, then PB consent, then tokens persisted).
+- **Non-Dr.Max consumers:** must register their own OAuth app in PB admin UI and set `PRODUCTBOARD_OAUTH_CLIENT_ID` env var. The error message that fires when no override is set walks them through the steps.
+
 ## [2.0.1] — 2026-05-26
 
 Adds OAuth 2.0 Authorization Code flow (with PKCE) as a second authentication option alongside the existing Personal Access Token (PAT) path. Both paths are first-class and fully supported; OAuth is preferred for fresh installs because it offers rotation, per-user audit trail, and browser-based onboarding instead of admin-issued tokens.
