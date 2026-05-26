@@ -119,6 +119,10 @@ export async function performOAuthSetup(opts: SetupOptions): Promise<TokenFile> 
     return tokens;
   } finally {
     clearTimeout(timeoutHandle);
+    // Browsers default to keep-alive on the OAuth callback. server.close() alone
+    // would wait for those idle sockets to time out before emitting 'close',
+    // hanging the MCP process. closeAllConnections() (Node ≥ 18.2) forces them shut.
+    server.closeAllConnections();
     server.close();
   }
 }
@@ -356,7 +360,11 @@ async function handleCallback(
   } catch (writeErr) {
     res.statusCode = 500;
     res.end("Authorization succeeded but tokens could not be persisted. See MCP stderr.");
-    ctx.onFailure(writeErr as AuthError);
+    const msg = (writeErr as Error).message ?? String(writeErr);
+    process.stderr.write(`[productboard-mcp] Token persist error: ${msg}\n`);
+    ctx.onFailure(
+      createAuthError("filesystem", `Could not save tokens: ${msg}`, "restart_mcp")
+    );
     return;
   }
 
