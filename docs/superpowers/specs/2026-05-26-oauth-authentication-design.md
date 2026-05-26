@@ -543,5 +543,54 @@ These are deferred to later iterations or accepted as known limitations:
 
 - Productboard OAuth Authorization Code reference: [https://developer.productboard.com/reference/oauth-authorization-code.md](https://developer.productboard.com/reference/oauth-authorization-code.md)
 - Productboard OAuth app registration: [https://app.productboard.com/oauth2/applications](https://app.productboard.com/oauth2/applications)
+- Productboard OAuth Public Client (Dynamic Registration) reference: [https://developer.productboard.com/reference/oauth-public-client.md](https://developer.productboard.com/reference/oauth-public-client.md)
+- RFC 7591 (Dynamic Client Registration): [https://datatracker.ietf.org/doc/html/rfc7591](https://datatracker.ietf.org/doc/html/rfc7591)
 - RFC 7636 (PKCE): [https://datatracker.ietf.org/doc/html/rfc7636](https://datatracker.ietf.org/doc/html/rfc7636)
 - RFC 8252 (OAuth 2.0 for Native Apps): [https://datatracker.ietf.org/doc/html/rfc8252](https://datatracker.ietf.org/doc/html/rfc8252) (loopback redirect rationale)
+
+---
+
+## Addendum (2026-05-27): pivot to Public Client Self-registered
+
+After the initial design landed and implementation began, the user identified a third OAuth option in Productboard's UI we missed in initial research: **Public Client Self-registered**. PB's UI text explicitly lists "MCP clients" as the target audience for this option.
+
+### What it is
+
+[Productboard Public Client OAuth](https://developer.productboard.com/reference/oauth-public-client.md) implements RFC 7591 Dynamic Client Registration on top of the same Authorization Code + PKCE flow this design uses. The MCP calls `POST https://app.productboard.com/oauth2/register` once at install time with `{redirect_uris, client_name}` and receives a fresh `client_id` issued specifically for that installation. All subsequent endpoints (`/oauth2/authorize`, `/oauth2/token`), PKCE behavior, scopes, refresh-token TTL/rotation, and consent screen UX are identical to the regular Authorization Code flow.
+
+### Why we pivot
+
+The pivot eliminates the hybrid "Dr.Max-registered default + env-var override for outsiders" complexity from the original design. Every consumer of the npm package self-registers a fresh client at first run, scoped to their own PB workspace:
+
+- No pre-publish OAuth app registration step required (the `DEFAULT_OAUTH_CLIENT_ID = ""` placeholder goes away).
+- Package is self-contained for any PB workspace consumer, not just Dr.Max users.
+- Better security posture — each install has an independently-revocable grant in PB.
+- `PRODUCTBOARD_OAUTH_CLIENT_ID` env var remains as an advanced override for orgs that pre-register a custom-branded OAuth app, but it's optional.
+
+### What changes in implementation
+
+Most of the implementation is reused. Specifically the PKCE generation, HTTP listener, chooser HTML, code-for-token exchange, refresh logic, and token store are all unchanged.
+
+New code:
+
+- **`src/auth/oauth-register.ts`** (~80 LOC) — implements `registerClient({callbackPort, clientName})` returning `{clientId}`. Persists a registration record to a sibling file `registration.json` alongside `tokens.json` so registration survives token-store deletion (a user deleting `tokens.json` to re-auth shouldn't burn one of PB's daily registration quota slots).
+- Helpers in `oauth-register.ts`: `readRegistration()`, `writeRegistration()`, `getRegistrationPath()` — same platform-native cache directory as `tokens.json`.
+
+Modified code:
+
+- **`src/auth/resolver.ts`** — `makeOauthResolution()` no longer calls a sync `resolveClientId()`. Instead, the background IIFE first calls a new async `resolveOrRegisterClient(callbackPort)` helper that resolves the client_id from (a) `PRODUCTBOARD_OAUTH_CLIENT_ID` env override, (b) loaded `registration.json`, or (c) fresh `registerClient()`. Then proceeds to load `tokens.json` (matching by clientId) or trigger `performOAuthSetup()`.
+- **`src/auth/types.ts`** — drop `DEFAULT_OAUTH_CLIENT_ID` (no default needed); add `RegistrationFile` interface with `{schemaVersion, clientId, clientName, redirectUri, registeredAt}`.
+
+### Rate limit awareness
+
+PB rate-limits registration to 5/minute and 50/day per remote IP. The implementation persists the registered `client_id` immediately, so a stable install only hits the endpoint once. Concurrent registrations from two MCP processes for the same user are an edge case — both succeed (independent client_ids); the file is last-write-wins. Either client_id remains valid in PB independently. Worst case: one of the two MCP instances has a "ghost" registration that the other one's `registration.json` doesn't reference. Harmless.
+
+### Failure mode if PB rejects a stored client_id
+
+If PB ever rejects the stored `client_id` (the user manually revoked the app in PB admin, the registration aged out, etc.), the refresh or token-exchange will return an OAuth error. The resolver detects this kind of error and deletes `registration.json` + `tokens.json`, then re-runs the full register-then-setup flow on the next request. Not implemented in v1's first iteration if not strictly needed — a user can manually delete both files to recover. Added if smoke testing reveals it's necessary.
+
+### Migration from the pre-pivot design
+
+The pre-pivot implementation (commits `259c25c` through `414978c` on this branch) already handles 90% of what's needed. The pivot is additive: insert a registration step before the existing setup flow, and remove the `DEFAULT_OAUTH_CLIENT_ID` empty-check path. Roughly two additional tasks (oauth-register module + resolver refactor), plus a docs revision.
+
+The body of this design document above describes the pre-pivot architecture. The implementation reflects the pivoted architecture per the addendum. Where the two disagree, the addendum wins.
