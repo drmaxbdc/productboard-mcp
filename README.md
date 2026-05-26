@@ -25,26 +25,31 @@ This MCP supports two auth paths. **OAuth (default)** is recommended for fresh i
 
 ### OAuth 2.0 (recommended)
 
-When neither `PRODUCTBOARD_ACCESS_TOKEN` nor `tokens.json` exists, the MCP server opens a browser on first start to a local scope-chooser page (Read only / Read + Write / Full access), redirects to Productboard for consent, and persists the resulting access + refresh tokens to a platform-native cache directory:
+When neither `PRODUCTBOARD_ACCESS_TOKEN` nor a stored registration exists, the MCP server self-registers as a Productboard Public Client (RFC 7591 Dynamic Client Registration) at first start, then opens a browser to a local scope-chooser page (Read only / Read + Write / Full access), redirects to Productboard for consent, and persists the resulting access + refresh tokens to a platform-native cache directory.
+
+The dynamically registered `client_id` is saved to `registration.json` alongside the tokens. This means each MCP installation gets its own OAuth grant scoped to the authenticating user's workspace — no shared client_id across users, and the package works out-of-the-box for any Productboard workspace without prior app registration.
+
+Storage locations:
 
 | OS | Path |
 | --- | --- |
-| macOS | `~/Library/Application Support/productboard-mcp/tokens.json` |
-| Linux | `${XDG_CONFIG_HOME:-$HOME/.config}/productboard-mcp/tokens.json` |
-| Windows | `%APPDATA%\productboard-mcp\tokens.json` |
+| macOS | `~/Library/Application Support/productboard-mcp/{tokens.json, registration.json}` |
+| Linux | `${XDG_CONFIG_HOME:-$HOME/.config}/productboard-mcp/{tokens.json, registration.json}` |
+| Windows | `%APPDATA%\productboard-mcp\{tokens.json, registration.json}` |
 
 Tokens are written with permissions `0600` (POSIX). Refresh is automatic — access tokens are renewed 5 minutes before expiry, and refresh tokens (180-day validity) rotate on every use. The refresh-token grace window in PB's OAuth implementation handles multi-process token contention safely.
 
-If you need to start setup over (change scope, switch to a different PB workspace, etc.), delete `tokens.json` and restart the MCP.
+If you need to start setup over (change scope, switch to a different PB workspace, etc.), delete `tokens.json` and restart the MCP. To also re-register the OAuth client (rarely needed — e.g., if the registered app was revoked in PB admin), delete `registration.json` as well.
 
 #### Optional env vars
 
 | Env var | Default | Purpose |
 | --- | --- | --- |
 | `PRODUCTBOARD_AUTH_MODE` | (unset = auto) | Set to `oauth` to force OAuth even if `PRODUCTBOARD_ACCESS_TOKEN` is set; set to `pat` to require PAT (good for CI). |
-| `PRODUCTBOARD_OAUTH_CLIENT_ID` | (Dr.Max embedded) | Override with your own OAuth app's client_id if you're outside the Dr.Max Productboard workspace. Register an app at [https://app.productboard.com/oauth2/applications](https://app.productboard.com/oauth2/applications). |
-| `PRODUCTBOARD_OAUTH_CALLBACK_PORT` | `7779` | Override the callback port. Also re-register the matching `http://127.0.0.1:<port>/callback` URI in your OAuth app. |
+| `PRODUCTBOARD_OAUTH_CLIENT_ID` | (self-registers) | Advanced: bypass self-registration by providing your own pre-registered OAuth app's `client_id`. Register at [https://app.productboard.com/oauth2/applications](https://app.productboard.com/oauth2/applications). Most users don't need this. |
+| `PRODUCTBOARD_OAUTH_CALLBACK_PORT` | `7779` | Override the callback port. Also re-register the matching `http://127.0.0.1:<port>/callback` URI if you're using your own pre-registered OAuth app. |
 | `PRODUCTBOARD_OAUTH_TOKEN_PATH` | (platform-native, see above) | Override the tokens.json location (e.g. for Docker volumes). |
+| `PRODUCTBOARD_OAUTH_REGISTRATION_PATH` | (platform-native, see above) | Override the registration.json location (e.g. for Docker volumes). |
 | `PRODUCTBOARD_OAUTH_SCOPES` | (chooser shown) | Space- or comma-separated scopes. Set this to bypass the chooser page. |
 
 ### Personal Access Token (PAT, fallback)

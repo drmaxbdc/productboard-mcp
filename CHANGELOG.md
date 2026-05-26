@@ -11,11 +11,12 @@ Adds OAuth 2.0 Authorization Code flow (with PKCE) as a second authentication op
 
 ### Added
 
-- **OAuth 2.0 authentication.** First-run setup opens a browser-based scope chooser (Read only / Read+Write / Full), then the standard Productboard authorize-and-consent flow. Tokens are persisted to the platform-native cache directory with file perms `0600` and refreshed proactively (5-minute buffer before expiry) and reactively (one retry after a 401). The 60-minute refresh-token grace window in Productboard's OAuth implementation is leveraged to handle multi-process token contention without explicit file locking.
+- **OAuth 2.0 authentication via Public Client Self-registration (RFC 7591).** First-run flow: the MCP dynamically registers itself as a public OAuth client at `POST https://app.productboard.com/oauth2/register` (no manual app registration needed), then opens a browser-based scope chooser (Read only / Read+Write / Full), then runs the standard Productboard authorize-and-consent flow with PKCE. Tokens are persisted to the platform-native cache directory with file perms `0600` and refreshed proactively (5-minute buffer before expiry) and reactively (one retry after a 401). The 60-minute refresh-token grace window in Productboard's OAuth implementation is leveraged to handle multi-process token contention without explicit file locking. The dynamically registered `client_id` is persisted separately to `registration.json` so deleting `tokens.json` to re-authorize does not burn a registration quota slot (PB rate-limits registration to 5/min, 50/day per IP).
 - **`PRODUCTBOARD_AUTH_MODE` env var.** Optional. `oauth` forces OAuth even if `PRODUCTBOARD_ACCESS_TOKEN` is set; `pat` requires the env var. Unset → auto (priority tree: PAT env > OAuth tokens.json > setup flow).
-- **`PRODUCTBOARD_OAUTH_CLIENT_ID` env var.** Optional override of the embedded Dr.Max OAuth client_id (for non-Dr.Max consumers who register their own OAuth app).
-- **`PRODUCTBOARD_OAUTH_CALLBACK_PORT` env var.** Optional override of the default `7779` callback port (also re-register the new URL in your PB OAuth app).
+- **`PRODUCTBOARD_OAUTH_CLIENT_ID` env var.** Optional advanced override. Pre-register your own custom-branded OAuth app in your PB workspace and set this env var to bypass the self-registration step. Most users don't need it.
+- **`PRODUCTBOARD_OAUTH_CALLBACK_PORT` env var.** Optional override of the default `7779` callback port (also re-register the new URL in your PB OAuth app if using your own pre-registered client).
 - **`PRODUCTBOARD_OAUTH_TOKEN_PATH` env var.** Optional override of the tokens.json location (Docker volumes, multi-tenant test setups).
+- **`PRODUCTBOARD_OAUTH_REGISTRATION_PATH` env var.** Optional override of the registration.json location.
 - **`PRODUCTBOARD_OAUTH_SCOPES` env var.** Optional space- or comma-separated list of scopes; bypasses the chooser page.
 
 ### Changed

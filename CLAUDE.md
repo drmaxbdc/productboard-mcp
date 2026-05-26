@@ -90,13 +90,13 @@ The MCP supports two auth modes. They share the same `apiRequest()` entry point 
 
 **PAT mode** (`PRODUCTBOARD_ACCESS_TOKEN` env var set, OR `PRODUCTBOARD_AUTH_MODE=pat`): Sync env-var read, no refresh, no recovery on 401 — surface a structured "switch to OAuth" hint instead.
 
-**OAuth mode** (default when no PAT env var, OR `PRODUCTBOARD_AUTH_MODE=oauth`): On first start, opens a browser to a local scope chooser at `http://127.0.0.1:7779/`, then PB authorize, then exchanges the returned code for tokens. Tokens persist to `~/Library/Application Support/productboard-mcp/tokens.json` (macOS path; see [src/auth/token-store.ts](src/auth/token-store.ts) for Linux/Windows). Refresh happens proactively 5 minutes before expiry and reactively on 401.
+**OAuth mode** (default when no PAT env var, OR `PRODUCTBOARD_AUTH_MODE=oauth`): On first start, the MCP self-registers as a Productboard Public Client (RFC 7591) via `POST /oauth2/register`, persists the resulting `client_id` to `registration.json`, then opens a browser to a local scope chooser at `http://127.0.0.1:7779/`, runs the PB authorize-and-consent flow, and exchanges the returned code for tokens. Both `tokens.json` and `registration.json` persist to `~/Library/Application Support/productboard-mcp/` (macOS path; see [src/auth/token-store.ts](src/auth/token-store.ts) and [src/auth/oauth-register.ts](src/auth/oauth-register.ts) for Linux/Windows). Refresh happens proactively 5 minutes before expiry and reactively on 401.
 
 **Priority tree** (in [src/auth/resolver.ts](src/auth/resolver.ts)):
 
 1. `PRODUCTBOARD_AUTH_MODE=oauth` → OAuth (ignore PAT env)
 2. `PRODUCTBOARD_AUTH_MODE=pat` → PAT (require env var)
-3. Otherwise: `PRODUCTBOARD_ACCESS_TOKEN` set → PAT; `tokens.json` exists → OAuth; neither → trigger OAuth setup
+3. Otherwise: `PRODUCTBOARD_ACCESS_TOKEN` set → PAT; `tokens.json` exists → OAuth; neither → resolve-or-register OAuth client_id (via env override, stored `registration.json`, or fresh `POST /oauth2/register`), then trigger OAuth setup
 
 **Code organization:**
 
@@ -104,6 +104,7 @@ The MCP supports two auth modes. They share the same `apiRequest()` entry point 
 - [src/auth/token-store.ts](src/auth/token-store.ts) — read/atomic-write of tokens.json with `0600` perms
 - [src/auth/oauth-refresh.ts](src/auth/oauth-refresh.ts) — proactive + reactive refresh, retry/backoff, `invalid_grant` hard error
 - [src/auth/oauth-setup.ts](src/auth/oauth-setup.ts) — PKCE, local HTTP listener with `/`, `/start`, `/callback` routes, scope chooser HTML, browser launch
+- [src/auth/oauth-register.ts](src/auth/oauth-register.ts) — RFC 7591 Dynamic Client Registration. `registerClient()` POSTs to PB's `/oauth2/register`; `readRegistration()` / `writeRegistration()` for the per-install `registration.json` persistence
 - [src/auth/resolver.ts](src/auth/resolver.ts) — priority tree, env-var validation, exposes `createAuthResolution()`
 - [src/api/client.ts](src/api/client.ts) — calls `requireResolution().getBearer()` instead of reading env directly; 401 handler does forceRefresh + retry-once in OAuth mode
 
