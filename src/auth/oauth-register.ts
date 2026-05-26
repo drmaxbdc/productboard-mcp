@@ -241,6 +241,14 @@ export async function registerClient(opts: RegisterOptions): Promise<Registratio
       client_name?: string;
     };
 
+    if (typeof body.client_id !== "string" || !body.client_id) {
+      throw createAuthError(
+        "config_invalid",
+        `OAuth registration response missing client_id. Body: ${JSON.stringify(body)}`,
+        "set_env_var"
+      );
+    }
+
     const reg: RegistrationFile = {
       schemaVersion: 1,
       clientId: body.client_id,

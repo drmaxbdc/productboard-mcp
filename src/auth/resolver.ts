@@ -1,7 +1,7 @@
 import { readTokens } from "./token-store.js";
 import { performOAuthSetup, type SetupOptions } from "./oauth-setup.js";
 import { refreshIfNeeded, forceRefresh } from "./oauth-refresh.js";
-import { readRegistration, registerClient } from "./oauth-register.js";
+import { readRegistration, registerClient, writeRegistration } from "./oauth-register.js";
 import {
   createAuthError,
   DEFAULT_CALLBACK_PORT,
@@ -54,7 +54,36 @@ async function resolveOrRegisterClient(callbackPort: number): Promise<string> {
   const existing = await readRegistration();
   if (existing) return existing.clientId;
 
-  // 3. Otherwise, register a fresh public client with PB.
+  // 3. Recovery path: registration.json is missing but tokens.json may carry a
+  // valid clientId from a previous run (e.g., registration.json lost to a
+  // Docker volume mismatch). Reuse that clientId to avoid burning a PB
+  // registration quota slot AND forcing re-auth.
+  const tokens = await readTokens();
+  if (tokens?.clientId) {
+    process.stderr.write(
+      `[productboard-mcp] registration.json missing but tokens.json has clientId=${tokens.clientId}. ` +
+        `Reusing existing registration (no new POST /oauth2/register).\n`
+    );
+    // Reconstruct registration.json so future runs skip this dance.
+    try {
+      await writeRegistration({
+        schemaVersion: 1,
+        clientId: tokens.clientId,
+        clientName: "Productboard MCP (recovered)",
+        redirectUri: `http://127.0.0.1:${callbackPort}/callback`,
+        registeredAt: tokens.createdAt,
+        issuer: tokens.issuer,
+      });
+    } catch (writeErr) {
+      // Recovery failed — log but continue with the reused clientId.
+      process.stderr.write(
+        `[productboard-mcp] Could not reconstruct registration.json: ${(writeErr as Error).message}\n`
+      );
+    }
+    return tokens.clientId;
+  }
+
+  // 4. Otherwise, register a fresh public client with PB.
   process.stderr.write(
     `[productboard-mcp] No registration.json found. Self-registering OAuth public client with Productboard…\n`
   );
