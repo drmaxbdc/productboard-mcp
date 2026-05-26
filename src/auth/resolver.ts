@@ -4,6 +4,7 @@ import { refreshIfNeeded, forceRefresh } from "./oauth-refresh.js";
 import {
   DEFAULT_CALLBACK_PORT,
   DEFAULT_OAUTH_CLIENT_ID,
+  isAuthError,
   type AuthError,
   type AuthMode,
   type AuthResolution,
@@ -133,7 +134,7 @@ function makeOauthResolution(): AuthResolution {
       }
       await beginSetup();
     } catch (err) {
-      setupError = err as AuthError;
+      setupError = toAuthError(err);
     }
   })();
 
@@ -143,7 +144,7 @@ function makeOauthResolution(): AuthResolution {
     try {
       tokens = await setupPromise;
     } catch (err) {
-      setupError = err as AuthError;
+      setupError = toAuthError(err);
     } finally {
       setupPromise = null;
     }
@@ -173,7 +174,7 @@ function makeOauthResolution(): AuthResolution {
         tokens = await forceRefresh(tokens);
         return tokens.accessToken;
       } catch (err) {
-        setupError = err as AuthError;
+        setupError = toAuthError(err);
         throw err;
       }
     },
@@ -190,4 +191,10 @@ function createAuthError(
   err.kind = kind;
   err.remediation = remediation;
   return err;
+}
+
+function toAuthError(err: unknown): AuthError {
+  if (isAuthError(err)) return err;
+  const message = err instanceof Error ? err.message : String(err);
+  return createAuthError("config_invalid", `Unexpected non-AuthError thrown from auth path: ${message}`, "restart_mcp");
 }
