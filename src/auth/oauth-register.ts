@@ -222,6 +222,38 @@ export async function registerClient(opts: RegisterOptions): Promise<Registratio
       continue;
     }
 
+    if (response.status === 404) {
+      // Productboard's documented Dynamic Client Registration endpoint is
+      // currently unwired upstream. Walk the user through manual registration.
+      let rawBody = "";
+      try { rawBody = await response.text(); } catch { /* ignore */ }
+      throw createAuthError(
+        "config_invalid",
+        `Productboard's Dynamic Client Registration endpoint returned HTTP 404 ` +
+          `(POST ${REGISTRATION_URL}). The endpoint is documented but appears ` +
+          `to be currently unavailable in production.\n\n` +
+          `Workaround: register your OAuth app manually and provide the client_id ` +
+          `via the PRODUCTBOARD_OAUTH_CLIENT_ID env var.\n\n` +
+          `Manual registration steps:\n` +
+          `  1. Open https://app.productboard.com/oauth2/applications in your ` +
+          `browser (must be a Productboard admin).\n` +
+          `  2. Fill in the form. Required Redirect URI: ` +
+          `http://127.0.0.1:${opts.callbackPort}/callback (matches the MCP's ` +
+          `callback port; if you set PRODUCTBOARD_OAUTH_CALLBACK_PORT to a ` +
+          `different value, use that port instead).\n` +
+          `  3. Pick the V2 scopes your team needs (all 8 for full functionality: ` +
+          `entities:read/write/delete, notes:read/write/delete, analytics:read, ` +
+          `members_pii:read). Leave V1 scopes empty.\n` +
+          `  4. After submission, copy the issued client_id and export it:\n` +
+          `       export PRODUCTBOARD_OAUTH_CLIENT_ID='<your-client-id>'\n` +
+          `  5. Restart this MCP server.\n\n` +
+          `Dr.Max users on tars do not need to do this — tars provides the ` +
+          `embedded Dr.Max client_id via roles.json (when bumped to 2.0.2+).\n\n` +
+          `Raw upstream response body: ${rawBody || "(empty)"}`,
+        "set_env_var"
+      );
+    }
+
     if (!response.ok) {
       // 4xx (non-429): configuration or request error — don't retry
       let errBody = "(no body)";
