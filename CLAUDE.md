@@ -90,13 +90,13 @@ The MCP supports two auth modes. They share the same `apiRequest()` entry point 
 
 **PAT mode** (`PRODUCTBOARD_ACCESS_TOKEN` env var set, OR `PRODUCTBOARD_AUTH_MODE=pat`): Sync env-var read, no refresh, no recovery on 401 — surface a structured "switch to OAuth" hint instead.
 
-**OAuth mode** (default when no PAT env var, OR `PRODUCTBOARD_AUTH_MODE=oauth`): On first start, the MCP self-registers as a Productboard Public Client (RFC 7591) via `POST /oauth2/register`, persists the resulting `client_id` to `registration.json`, then opens a browser to a local scope chooser at `http://127.0.0.1:7779/`, runs the PB authorize-and-consent flow, and exchanges the returned code for tokens. Both `tokens.json` and `registration.json` persist to `~/Library/Application Support/productboard-mcp/` (macOS path; see [src/auth/token-store.ts](src/auth/token-store.ts) and [src/auth/oauth-register.ts](src/auth/oauth-register.ts) for Linux/Windows). Refresh happens proactively 5 minutes before expiry and reactively on 401.
+**OAuth mode** (default when no PAT env var, OR `PRODUCTBOARD_AUTH_MODE=oauth`): On first start, the resolver picks the OAuth `client_id` from one of (in order): `PRODUCTBOARD_OAUTH_CLIENT_ID` env override, a stored `registration.json`, the recovered `clientId` field of an existing `tokens.json`, or the embedded `DEFAULT_OAUTH_CLIENT_ID` for the Dr.Max-registered OAuth app. Only as a last resort does the resolver fall through to `POST /oauth2/register` (Dynamic Client Registration, RFC 7591) — that endpoint is documented but currently returns HTTP 404 in production (known upstream bug; the code stays in place so it works the day PB fixes it). Once a `client_id` is resolved, the MCP persists it to `registration.json`, opens a browser to a local scope chooser at `http://127.0.0.1:7779/`, runs the PB authorize-and-consent flow, and exchanges the returned code for tokens. Both `tokens.json` and `registration.json` persist to `~/Library/Application Support/productboard-mcp/` (macOS path; see [src/auth/token-store.ts](src/auth/token-store.ts) and [src/auth/oauth-register.ts](src/auth/oauth-register.ts) for Linux/Windows). Refresh happens proactively 5 minutes before expiry and reactively on 401.
 
 **Priority tree** (in [src/auth/resolver.ts](src/auth/resolver.ts)):
 
 1. `PRODUCTBOARD_AUTH_MODE=oauth` → OAuth (ignore PAT env)
 2. `PRODUCTBOARD_AUTH_MODE=pat` → PAT (require env var)
-3. Otherwise: `PRODUCTBOARD_ACCESS_TOKEN` set → PAT; `tokens.json` exists → OAuth; neither → resolve-or-register OAuth client_id (via env override, stored `registration.json`, or fresh `POST /oauth2/register`), then trigger OAuth setup
+3. Otherwise: `PRODUCTBOARD_ACCESS_TOKEN` set → PAT; `tokens.json` exists → OAuth; neither → resolve the OAuth client_id (env override → `registration.json` → tokens.json recovery → embedded Dr.Max default → fresh `POST /oauth2/register` if all else fails), then trigger OAuth setup.
 
 **Code organization:**
 
