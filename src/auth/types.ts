@@ -1,4 +1,7 @@
-// Auth-related shared types. No runtime logic; purely declarative.
+// Auth-related shared types, constants, and small cross-module runtime helpers.
+// Runtime helpers (isAuthError, createAuthError, resolveClientSecret) live here
+// so other auth modules can import them without creating import cycles —
+// notably oauth-refresh.ts reading client_secret without depending on resolver.ts.
 
 export type AuthMode = "auto" | "oauth" | "pat";
 

@@ -331,16 +331,31 @@ async function handleCallback(
   }
 
   if (!exchangeResponse.ok) {
-    const bodyText = await exchangeResponse.text().catch(() => "");
+    // Parse OAuth standard error fields only; never log the raw body. PB normally
+    // returns {"error":"...","error_description":"..."}, but if anything ever echoes
+    // request params (e.g. via a gateway-layer error) the raw body could contain
+    // client_secret. Same defensive posture as buildHeaders() for Bearer values.
+    const rawBody = await exchangeResponse.text().catch(() => "");
+    let safeDetail = "(no parsable detail)";
+    try {
+      const parsed = JSON.parse(rawBody) as { error?: string; error_description?: string };
+      const code = typeof parsed.error === "string" ? parsed.error : "";
+      const desc = typeof parsed.error_description === "string" ? parsed.error_description : "";
+      const combined = [code, desc].filter(Boolean).join(": ");
+      if (combined) safeDetail = combined;
+    } catch {
+      // Non-JSON body: do not log it (may contain echoed credentials). Length only.
+      safeDetail = `(non-JSON body, ${rawBody.length} chars suppressed)`;
+    }
     res.statusCode = 500;
     res.end("Token exchange failed. See MCP stderr for details.");
     process.stderr.write(
-      `[productboard-mcp] Token exchange failed: HTTP ${exchangeResponse.status}\n${bodyText}\n`
+      `[productboard-mcp] Token exchange failed: HTTP ${exchangeResponse.status} — ${safeDetail}\n`
     );
     ctx.onFailure(
       createAuthError(
         "expired",
-        `Token exchange failed: HTTP ${exchangeResponse.status}. This usually means client_id or redirect_uri mismatch. Verify your PB OAuth app config.`,
+        `Token exchange failed: HTTP ${exchangeResponse.status} — ${safeDetail}. This usually means client_id, client_secret, or redirect_uri mismatch. Verify your PB OAuth app config.`,
         "restart_mcp"
       )
     );
