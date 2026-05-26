@@ -5,6 +5,31 @@ All notable changes to `@drmaxbdc/productboard-mcp` are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] — 2026-05-27
+
+Hotfix: makes 2.0.2's OAuth path actually finish. The 2.0.2 design assumed all manually-registered Productboard OAuth apps were Public Clients (PKCE-only, no secret). They are not: PB's admin UI issues a `client_secret` for every manually-registered app, with no Public Client / PKCE-only option. Authorize succeeds but token exchange fails with HTTP 400.
+
+### Added
+
+- **`PRODUCTBOARD_OAUTH_CLIENT_SECRET` env var.** When set, included in `POST /oauth2/token` for both the initial authorization-code exchange (in `oauth-setup.ts`) and every subsequent refresh (in `oauth-refresh.ts`). Stripped of CR/LF and trimmed before use. Not persisted to `tokens.json` — re-read from env at each refresh, so the secret stays in whatever store the consumer chose (tars `roles.json`, Claude Code MCP config env block, shell init, etc.).
+- **`resolveClientSecret()` helper** in `src/auth/types.ts`. Lives in `types.ts` (not `resolver.ts`) so `oauth-refresh.ts` can import it without creating a `resolver` ↔ `refresh` circular import.
+
+### Changed
+
+- **404 error message in `registerClient()`** now instructs the user to copy both `client_id` and `client_secret` from PB admin UI and export both env vars. Previously instructed only on `client_id`.
+- **`SetupOptions.clientSecret` field** added; threaded through `HandlerContext` to the token-exchange body.
+
+### Known issues (still upstream)
+
+- **Productboard's `POST /oauth2/register` still returns HTTP 404** (Kong gateway, no backend wired). When upstream is fixed, the dynamic-registration path will activate automatically and produce a true Public Client — at which point `PRODUCTBOARD_OAUTH_CLIENT_SECRET` becomes optional. The code already handles both cases (omits `client_secret` from the request when undefined).
+
+### Migration notes for callers
+
+- **Nothing breaks for PAT users.** PAT mode is unaffected.
+- **Dr.Max users on tars:** after `roles.json` is bumped to 2.0.3, `PRODUCTBOARD_OAUTH_CLIENT_SECRET` must be added to the productboard MCP's env block alongside the existing config. Without it, token exchange returns HTTP 400.
+- **Non-Dr.Max consumers:** must register their own OAuth app in PB admin UI and set both `PRODUCTBOARD_OAUTH_CLIENT_ID` and `PRODUCTBOARD_OAUTH_CLIENT_SECRET`. The 404 error message now walks through both.
+- **Existing OAuth installations from 2.0.2:** delete `tokens.json` (the 2.0.2 attempt never succeeded) and restart with the secret env var set.
+
 ## [2.0.2] — 2026-05-27
 
 Hotfix: makes OAuth usable today by embedding a Dr.Max-registered `client_id` as the default, working around an upstream Productboard bug in `POST /oauth2/register` that returns HTTP 404 in production. The dynamic-registration code path is unchanged and will start working automatically the day Productboard fixes the endpoint.

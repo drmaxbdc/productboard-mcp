@@ -3,6 +3,7 @@ import {
   createAuthError,
   PRODUCTBOARD_OAUTH_TOKEN_URL,
   REFRESH_BUFFER_MS,
+  resolveClientSecret,
   type TokenFile,
   type AuthError,
 } from "./types.js";
@@ -52,11 +53,19 @@ export async function forceRefresh(current: TokenFile): Promise<TokenFile> {
 }
 
 async function performRefresh(current: TokenFile): Promise<TokenFile> {
-  const body = new URLSearchParams({
+  // Re-read client_secret from env at refresh time. Not persisted to tokens.json.
+  // Confidential clients (the only kind PB's admin UI issues) must send the secret
+  // here; true Public Clients leave it undefined.
+  const params: Record<string, string> = {
     grant_type: "refresh_token",
     refresh_token: current.refreshToken,
     client_id: current.clientId,
-  }).toString();
+  };
+  const clientSecret = resolveClientSecret();
+  if (clientSecret) {
+    params.client_secret = clientSecret;
+  }
+  const body = new URLSearchParams(params).toString();
 
   const MAX_ATTEMPTS = 3;
   const backoffMs = [1000, 4000, 16000];

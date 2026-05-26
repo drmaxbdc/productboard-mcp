@@ -17,6 +17,13 @@ import {
 
 export interface SetupOptions {
   clientId: string;
+  /**
+   * Confidential-client secret, included in token exchange when set. Required by
+   * Productboard for any app registered manually via the admin UI (which always
+   * issues a client_secret). Omitted from the request body when undefined so the
+   * PKCE-only flow still works for true Public Clients.
+   */
+  clientSecret?: string;
   callbackPort?: number;
   /**
    * If provided, the chooser page is skipped and these scopes are requested verbatim.
@@ -55,6 +62,7 @@ export async function performOAuthSetup(opts: SetupOptions): Promise<TokenFile> 
   const server: Server = createServer((req, res) =>
     handleRequest(req, res, {
       clientId: opts.clientId,
+      clientSecret: opts.clientSecret,
       redirectUri,
       codeVerifier,
       codeChallenge,
@@ -130,6 +138,7 @@ export async function performOAuthSetup(opts: SetupOptions): Promise<TokenFile> 
 
 interface HandlerContext {
   clientId: string;
+  clientSecret?: string;
   redirectUri: string;
   codeVerifier: string;
   codeChallenge: string;
@@ -283,14 +292,20 @@ async function handleCallback(
     return;
   }
 
-  // Exchange code for tokens
-  const exchangeBody = new URLSearchParams({
+  // Exchange code for tokens. client_secret is included when present (Confidential
+  // Client, the only kind PB's admin UI issues). For true Public Clients (PKCE-only,
+  // future dynamic-registration path), the secret is undefined and the body omits it.
+  const exchangeParams: Record<string, string> = {
     grant_type: "authorization_code",
     code,
     client_id: ctx.clientId,
     redirect_uri: ctx.redirectUri,
     code_verifier: ctx.codeVerifier,
-  }).toString();
+  };
+  if (ctx.clientSecret) {
+    exchangeParams.client_secret = ctx.clientSecret;
+  }
+  const exchangeBody = new URLSearchParams(exchangeParams).toString();
 
   let exchangeResponse: Response;
   try {

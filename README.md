@@ -47,20 +47,23 @@ If you need to start setup over (change scope, switch to a different PB workspac
 
 #### Registering your own OAuth app (non-Dr.Max consumers)
 
-Until Productboard's Dynamic Client Registration endpoint comes online, non-Dr.Max workspaces need a manually registered OAuth app:
+Until Productboard's Dynamic Client Registration endpoint comes online, every OAuth app must be registered manually via PB admin UI. Note that PB's UI does not offer a Public Client / PKCE-only option — every manually-registered app is a Confidential Client with a `client_secret`, so both env vars below are required.
 
 1. Sign in to Productboard as an admin and open [https://app.productboard.com/oauth2/applications](https://app.productboard.com/oauth2/applications).
-2. Click **New OAuth application** and pick **Public Client Self-registered**.
+2. Click **New OAuth application**.
 3. Fill in the form. Critical fields:
    - **Redirect URI:** `http://127.0.0.1:7779/callback`. If you change `PRODUCTBOARD_OAUTH_CALLBACK_PORT`, also re-register the matching URL here.
    - **API V2 Scopes:** check whichever subset your team needs. For the full MCP tool surface check all 8: `entities:read`, `entities:write`, `entities:delete`, `notes:read`, `notes:write`, `notes:delete`, `analytics:read`, `members_pii:read`.
    - **API V1 Scopes:** leave empty (V1 sunsets 2026-07-08; OAuth was never wired to V1).
-4. Save and copy the issued `client_id`.
-5. Set the env var and restart:
+4. Save and copy both the issued `client_id` and `client_secret` (PB only shows the secret once).
+5. Set both env vars and restart:
 
    ```bash
    export PRODUCTBOARD_OAUTH_CLIENT_ID='paste-your-client-id-here'
+   export PRODUCTBOARD_OAUTH_CLIENT_SECRET='paste-your-client-secret-here'
    ```
+
+The MCP sends `client_secret` in every `POST /oauth2/token` call (initial code-for-tokens exchange and every refresh). It is never persisted to `tokens.json` — read from env at each request so it stays in whatever store you chose for it.
 
 #### Optional env vars
 
@@ -68,6 +71,7 @@ Until Productboard's Dynamic Client Registration endpoint comes online, non-Dr.M
 | --- | --- | --- |
 | `PRODUCTBOARD_AUTH_MODE` | (unset = auto) | Set to `oauth` to force OAuth even if `PRODUCTBOARD_ACCESS_TOKEN` is set; set to `pat` to require PAT (good for CI). |
 | `PRODUCTBOARD_OAUTH_CLIENT_ID` | (embedded Dr.Max) | Your own OAuth app's client_id. Required for non-Dr.Max consumers until Productboard's dynamic registration endpoint works. |
+| `PRODUCTBOARD_OAUTH_CLIENT_SECRET` | (unset) | Required when using a Confidential Client (i.e. anything registered via PB's admin UI). Dr.Max users on tars get this from `roles.json`. Without it, token exchange returns HTTP 400. |
 | `PRODUCTBOARD_OAUTH_CALLBACK_PORT` | `7779` | Override the callback port. Re-register the matching `http://127.0.0.1:<port>/callback` URI in your OAuth app. |
 | `PRODUCTBOARD_OAUTH_TOKEN_PATH` | (platform-native, see above) | Override the tokens.json location (e.g. for Docker volumes). |
 | `PRODUCTBOARD_OAUTH_REGISTRATION_PATH` | (platform-native, see above) | Override the registration.json location. |

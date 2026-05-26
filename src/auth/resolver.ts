@@ -7,6 +7,7 @@ import {
   DEFAULT_CALLBACK_PORT,
   DEFAULT_OAUTH_CLIENT_ID,
   isAuthError,
+  resolveClientSecret,
   type AuthError,
   type AuthMode,
   type AuthResolution,
@@ -177,6 +178,7 @@ function makePatResolution(token: string): AuthResolution {
 function makeOauthResolution(): AuthResolution {
   const callbackPort = resolveCallbackPort();
   const fixedScopes = resolveFixedScopes();
+  const clientSecret = resolveClientSecret();
 
   let clientId: string | null = null;  // resolved inside the IIFE
   let tokens: TokenFile | null = null;
@@ -218,7 +220,7 @@ function makeOauthResolution(): AuthResolution {
         "restart_mcp"
       );
     }
-    const opts: SetupOptions = { clientId, callbackPort, fixedScopes };
+    const opts: SetupOptions = { clientId, clientSecret, callbackPort, fixedScopes };
     setupPromise = performOAuthSetup(opts);
     try {
       tokens = await setupPromise;

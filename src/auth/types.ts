@@ -133,3 +133,23 @@ export const REFRESH_BUFFER_MS = 5 * 60 * 1000;
  * working automatically the day the endpoint comes online.
  */
 export const DEFAULT_OAUTH_CLIENT_ID: string = "xVJ-rOhRtGP8-BtqtaEovF8YlR6VMp91PG_mznsUCGE";
+
+/**
+ * Read PRODUCTBOARD_OAUTH_CLIENT_SECRET from env. Required when the OAuth app
+ * is a Confidential Client (PB's admin UI issues a client_secret for every
+ * manually-registered app — there is no "Public Client" option in that UI).
+ * Optional for true Public Clients (dynamic registration via /oauth2/register),
+ * which use PKCE-only flow without a secret.
+ *
+ * Strips whitespace and CR/LF (same defensive cleanup as buildHeaders) so a
+ * pasted-with-label value doesn't smuggle bad bytes into the token request body.
+ *
+ * Lives here, not in resolver.ts, so oauth-refresh.ts can read it at refresh
+ * time without creating a resolver ↔ refresh import cycle.
+ */
+export function resolveClientSecret(): string | undefined {
+  const raw = process.env.PRODUCTBOARD_OAUTH_CLIENT_SECRET;
+  if (!raw) return undefined;
+  const cleaned = raw.replace(/[\r\n]/g, "").trim();
+  return cleaned.length > 0 ? cleaned : undefined;
+}

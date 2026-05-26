@@ -232,8 +232,8 @@ export async function registerClient(opts: RegisterOptions): Promise<Registratio
         `Productboard's Dynamic Client Registration endpoint returned HTTP 404 ` +
           `(POST ${REGISTRATION_URL}). The endpoint is documented but appears ` +
           `to be currently unavailable in production.\n\n` +
-          `Workaround: register your OAuth app manually and provide the client_id ` +
-          `via the PRODUCTBOARD_OAUTH_CLIENT_ID env var.\n\n` +
+          `Workaround: register your OAuth app manually and provide both the ` +
+          `client_id and client_secret via env vars.\n\n` +
           `Manual registration steps:\n` +
           `  1. Open https://app.productboard.com/oauth2/applications in your ` +
           `browser (must be a Productboard admin).\n` +
@@ -244,11 +244,15 @@ export async function registerClient(opts: RegisterOptions): Promise<Registratio
           `  3. Pick the V2 scopes your team needs (all 8 for full functionality: ` +
           `entities:read/write/delete, notes:read/write/delete, analytics:read, ` +
           `members_pii:read). Leave V1 scopes empty.\n` +
-          `  4. After submission, copy the issued client_id and export it:\n` +
+          `  4. After submission, copy the issued client_id AND client_secret. ` +
+          `(PB's admin UI issues both for every manual registration — it does ` +
+          `not offer a "Public Client" / PKCE-only option.) Export them:\n` +
           `       export PRODUCTBOARD_OAUTH_CLIENT_ID='<your-client-id>'\n` +
+          `       export PRODUCTBOARD_OAUTH_CLIENT_SECRET='<your-client-secret>'\n` +
           `  5. Restart this MCP server.\n\n` +
           `Dr.Max users on tars do not need to do this — tars provides the ` +
-          `embedded Dr.Max client_id via roles.json (when bumped to 2.0.2+).\n\n` +
+          `embedded Dr.Max client_id and the corresponding client_secret via ` +
+          `roles.json (when bumped to 2.0.3+).\n\n` +
           `Raw upstream response body: ${rawBody || "(empty)"}`,
         "set_env_var"
       );
