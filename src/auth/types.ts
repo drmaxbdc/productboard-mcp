@@ -35,6 +35,18 @@ export interface AuthError extends Error {
   detail?: string;     // extra context for log
 }
 
+/**
+ * Runtime type guard for AuthError. Use in catch blocks (where the value is `unknown`)
+ * before reading `kind` / `remediation` / `setupUrl` / `detail` fields.
+ */
+export function isAuthError(e: unknown): e is AuthError {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    (e as AuthError).authError === true
+  );
+}
+
 /** Returned by createAuthResolution(); the rest of the codebase uses this. */
 export interface AuthResolution {
   mode: "pat" | "oauth";
