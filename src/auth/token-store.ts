@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { TokenFile, AuthError } from "./types.js";
+import { createAuthError, type TokenFile, type AuthError } from "./types.js";
 
 /**
  * Resolves the platform-native cache path for tokens.json.
@@ -111,14 +111,3 @@ export async function deleteTokens(): Promise<void> {
   }
 }
 
-function createAuthError(
-  kind: AuthError["kind"],
-  message: string,
-  remediation: AuthError["remediation"]
-): AuthError {
-  const err = new Error(message) as AuthError;
-  err.authError = true;
-  err.kind = kind;
-  err.remediation = remediation;
-  return err;
-}

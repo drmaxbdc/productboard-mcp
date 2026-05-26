@@ -47,6 +47,22 @@ export function isAuthError(e: unknown): e is AuthError {
   );
 }
 
+/**
+ * Factory for AuthError instances. Use everywhere in the auth/ tree so the
+ * brand fields and shape stay consistent.
+ */
+export function createAuthError(
+  kind: AuthError["kind"],
+  message: string,
+  remediation: AuthError["remediation"]
+): AuthError {
+  const err = new Error(message) as AuthError;
+  err.authError = true;
+  err.kind = kind;
+  err.remediation = remediation;
+  return err;
+}
+
 /** Returned by createAuthResolution(); the rest of the codebase uses this. */
 export interface AuthResolution {
   mode: "pat" | "oauth";

@@ -1,5 +1,6 @@
 import { readTokens, writeTokensAtomic } from "./token-store.js";
 import {
+  createAuthError,
   PRODUCTBOARD_OAUTH_TOKEN_URL,
   REFRESH_BUFFER_MS,
   type TokenFile,
@@ -169,14 +170,3 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function createAuthError(
-  kind: AuthError["kind"],
-  message: string,
-  remediation: AuthError["remediation"]
-): AuthError {
-  const err = new Error(message) as AuthError;
-  err.authError = true;
-  err.kind = kind;
-  err.remediation = remediation;
-  return err;
-}

@@ -3,6 +3,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { spawn } from "node:child_process";
 import { writeTokensAtomic } from "./token-store.js";
 import {
+  createAuthError,
   DEFAULT_CALLBACK_PORT,
   PRODUCTBOARD_OAUTH_AUTHORIZE_URL,
   PRODUCTBOARD_OAUTH_ISSUER,
@@ -459,14 +460,3 @@ function escapeHtml(s: string): string {
   );
 }
 
-function createAuthError(
-  kind: AuthError["kind"],
-  message: string,
-  remediation: AuthError["remediation"]
-): AuthError {
-  const err = new Error(message) as AuthError;
-  err.authError = true;
-  err.kind = kind;
-  err.remediation = remediation;
-  return err;
-}

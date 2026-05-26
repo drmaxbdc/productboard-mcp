@@ -2,6 +2,7 @@ import { readTokens } from "./token-store.js";
 import { performOAuthSetup, type SetupOptions } from "./oauth-setup.js";
 import { refreshIfNeeded, forceRefresh } from "./oauth-refresh.js";
 import {
+  createAuthError,
   DEFAULT_CALLBACK_PORT,
   DEFAULT_OAUTH_CLIENT_ID,
   isAuthError,
@@ -179,18 +180,6 @@ function makeOauthResolution(): AuthResolution {
       }
     },
   };
-}
-
-function createAuthError(
-  kind: AuthError["kind"],
-  message: string,
-  remediation: AuthError["remediation"]
-): AuthError {
-  const err = new Error(message) as AuthError;
-  err.authError = true;
-  err.kind = kind;
-  err.remediation = remediation;
-  return err;
 }
 
 function toAuthError(err: unknown): AuthError {
