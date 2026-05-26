@@ -116,3 +116,20 @@ export const SETUP_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Proactive refresh window: refresh if accessToken expires within this many ms. */
 export const REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
+/**
+ * Dr.Max-registered OAuth Public Client `client_id`, obtained via manual
+ * registration at https://app.productboard.com/oauth2/applications. Used as
+ * the default when the consumer does not set PRODUCTBOARD_OAUTH_CLIENT_ID
+ * and registration.json does not exist yet.
+ *
+ * Non-Dr.Max consumers can override with their own OAuth app's client_id
+ * via the PRODUCTBOARD_OAUTH_CLIENT_ID env var.
+ *
+ * Dynamic Client Registration (RFC 7591) at /oauth2/register is documented
+ * by Productboard but currently returns 404 in production (Kong gateway
+ * has no backend wired). Will be re-checked when PB confirms a fix; the
+ * fallback to /oauth2/register in resolver.ts still runs and will start
+ * working automatically the day the endpoint comes online.
+ */
+export const DEFAULT_OAUTH_CLIENT_ID = "xVJ-rOhRtGP8-BtqtaEovF8YlR6VMp91PG_mznsUCGE";
