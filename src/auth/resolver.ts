@@ -1,10 +1,10 @@
 import { readTokens } from "./token-store.js";
 import { performOAuthSetup, type SetupOptions } from "./oauth-setup.js";
 import { refreshIfNeeded, forceRefresh } from "./oauth-refresh.js";
+import { readRegistration, registerClient } from "./oauth-register.js";
 import {
   createAuthError,
   DEFAULT_CALLBACK_PORT,
-  DEFAULT_OAUTH_CLIENT_ID,
   isAuthError,
   type AuthError,
   type AuthMode,
@@ -45,20 +45,27 @@ export function resolveCallbackPort(): number {
   return n;
 }
 
-function resolveClientId(): string {
+async function resolveOrRegisterClient(callbackPort: number): Promise<string> {
+  // 1. Explicit override (advanced path: org pre-registered its own OAuth app)
   const override = process.env.PRODUCTBOARD_OAUTH_CLIENT_ID?.trim();
   if (override) return override;
-  if (!DEFAULT_OAUTH_CLIENT_ID) {
-    throw createAuthError(
-      "config_invalid",
-      "OAuth client_id is not configured. Either:\n" +
-        "  • Set PRODUCTBOARD_OAUTH_CLIENT_ID to your registered OAuth app's client_id, or\n" +
-        "  • Use PAT auth instead by setting PRODUCTBOARD_ACCESS_TOKEN.\n\n" +
-        "To register an OAuth app: https://app.productboard.com/oauth2/applications",
-      "set_env_var"
-    );
-  }
-  return DEFAULT_OAUTH_CLIENT_ID;
+
+  // 2. Already self-registered? Reuse the persisted client_id.
+  const existing = await readRegistration();
+  if (existing) return existing.clientId;
+
+  // 3. Otherwise, register a fresh public client with PB.
+  process.stderr.write(
+    `[productboard-mcp] No registration.json found. Self-registering OAuth public client with Productboard…\n`
+  );
+  const registered = await registerClient({
+    callbackPort,
+    clientName: "Productboard MCP",
+  });
+  process.stderr.write(
+    `[productboard-mcp] Registered as public client_id=${registered.clientId}.\n`
+  );
+  return registered.clientId;
 }
 
 function resolveFixedScopes(): string[] | undefined {
@@ -108,10 +115,10 @@ function makePatResolution(token: string): AuthResolution {
 }
 
 function makeOauthResolution(): AuthResolution {
-  const clientId = resolveClientId();
   const callbackPort = resolveCallbackPort();
   const fixedScopes = resolveFixedScopes();
 
+  let clientId: string | null = null;  // resolved inside the IIFE
   let tokens: TokenFile | null = null;
   let setupPromise: Promise<TokenFile> | null = null;
   let setupError: AuthError | null = null;
@@ -120,9 +127,12 @@ function makeOauthResolution(): AuthResolution {
   // the MCP initialize handshake can complete fast.
   void (async () => {
     try {
+      // Resolve (or self-register) the OAuth client_id before any token work.
+      clientId = await resolveOrRegisterClient(callbackPort);
+
       const loaded = await readTokens();
       if (loaded) {
-        // If client_id changed (override added/removed/different app), invalidate.
+        // If client_id changed (override added/removed/different app/re-registered), invalidate.
         if (loaded.clientId !== clientId) {
           process.stderr.write(
             `[productboard-mcp] tokens.json client_id mismatch (file: ${loaded.clientId}, expected: ${clientId}). Triggering fresh OAuth setup.\n`
@@ -140,6 +150,14 @@ function makeOauthResolution(): AuthResolution {
   })();
 
   async function beginSetup(): Promise<void> {
+    if (!clientId) {
+      // Defensive — should never happen because we resolve clientId before calling beginSetup.
+      throw createAuthError(
+        "config_invalid",
+        "Internal error: clientId not resolved before OAuth setup. Restart MCP.",
+        "restart_mcp"
+      );
+    }
     const opts: SetupOptions = { clientId, callbackPort, fixedScopes };
     setupPromise = performOAuthSetup(opts);
     try {
