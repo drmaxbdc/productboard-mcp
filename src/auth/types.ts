@@ -116,12 +116,3 @@ export const SETUP_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Proactive refresh window: refresh if accessToken expires within this many ms. */
 export const REFRESH_BUFFER_MS = 5 * 60 * 1000;
-
-/**
- * Placeholder for the Dr.Max-registered OAuth client_id. Replace before publishing
- * 2.1.0 (after registering the OAuth app at https://app.productboard.com/oauth2/applications).
- * Users on non-Dr.Max workspaces override via PRODUCTBOARD_OAUTH_CLIENT_ID.
- *
- * The resolver checks for empty/placeholder values and fails fast with a clear error.
- */
-export const DEFAULT_OAUTH_CLIENT_ID = "";
