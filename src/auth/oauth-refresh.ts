@@ -76,7 +76,9 @@ async function performRefresh(current: TokenFile): Promise<TokenFile> {
       if (attempt === MAX_ATTEMPTS - 1) {
         throw createAuthError(
           "expired",
-          `Network error during refresh after ${MAX_ATTEMPTS} attempts: ${(netErr as Error).message}`,
+          `Network error during OAuth refresh after ${MAX_ATTEMPTS} attempts: ${(netErr as Error).message}. ` +
+            `Check connectivity to app.productboard.com; if reachable, restart MCP to retry. ` +
+            `(Restarting does NOT fix a network outage — wait for it to clear first.)`,
           "restart_mcp"
         );
       }
@@ -86,12 +88,17 @@ async function performRefresh(current: TokenFile): Promise<TokenFile> {
 
     if (response.status === 400) {
       // invalid_grant or similar — refresh token is no longer valid
-      let detail = "";
+      // Read body as text first; if it parses as JSON with our expected shape, use that.
+      // We must NOT call response.json() then response.text() — the body stream is
+      // single-use and the second call always fails ("body used already").
+      let rawBody = "";
+      try { rawBody = await response.text(); } catch { /* ignore */ }
+      let detail = "(no body)";
       try {
-        const errBody = (await response.json()) as { error?: string; error_description?: string };
+        const errBody = JSON.parse(rawBody) as { error?: string; error_description?: string };
         detail = errBody.error_description || errBody.error || "(no detail)";
       } catch {
-        detail = await response.text().catch(() => "(no body)");
+        detail = rawBody || "(no body)";
       }
       throw createAuthError(
         "expired",
