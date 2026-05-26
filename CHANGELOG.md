@@ -5,7 +5,7 @@ All notable changes to `@drmaxbdc/productboard-mcp` are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.1.0] — 2026-05-26
+## [2.0.1] — 2026-05-26
 
 Adds OAuth 2.0 Authorization Code flow (with PKCE) as a second authentication option alongside the existing Personal Access Token (PAT) path. Both paths are first-class and fully supported; OAuth is preferred for fresh installs because it offers rotation, per-user audit trail, and browser-based onboarding instead of admin-issued tokens.
 
