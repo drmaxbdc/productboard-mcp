@@ -61,7 +61,10 @@ export async function readTokens(): Promise<TokenFile | null> {
     typeof t.accessTokenExpiresAt !== "string" ||
     typeof t.refreshTokenExpiresAt !== "string" ||
     typeof t.scope !== "string" ||
-    typeof t.clientId !== "string"
+    typeof t.clientId !== "string" ||
+    typeof t.createdAt !== "string" ||
+    typeof t.updatedAt !== "string" ||
+    typeof t.issuer !== "string"
   ) {
     process.stderr.write(`[productboard-mcp] tokens.json at ${path} has unexpected shape; ignoring.\n`);
     return null;
@@ -82,6 +85,9 @@ export async function writeTokensAtomic(tokens: TokenFile): Promise<void> {
     await fs.writeFile(tmpPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
     await fs.rename(tmpPath, path);
   } catch (err: unknown) {
+    // Best-effort cleanup of the staged tmp file; ignore failures since the
+    // original error is more important and the tmp file may not exist.
+    try { await fs.unlink(tmpPath); } catch { /* ignore */ }
     const e = err as Error;
     throw createAuthError(
       "filesystem",
