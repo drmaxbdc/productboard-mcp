@@ -132,4 +132,4 @@ export const REFRESH_BUFFER_MS = 5 * 60 * 1000;
  * fallback to /oauth2/register in resolver.ts still runs and will start
  * working automatically the day the endpoint comes online.
  */
-export const DEFAULT_OAUTH_CLIENT_ID = "xVJ-rOhRtGP8-BtqtaEovF8YlR6VMp91PG_mznsUCGE";
+export const DEFAULT_OAUTH_CLIENT_ID: string = "xVJ-rOhRtGP8-BtqtaEovF8YlR6VMp91PG_mznsUCGE";

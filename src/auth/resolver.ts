@@ -5,6 +5,7 @@ import { readRegistration, registerClient, writeRegistration } from "./oauth-reg
 import {
   createAuthError,
   DEFAULT_CALLBACK_PORT,
+  DEFAULT_OAUTH_CLIENT_ID,
   isAuthError,
   type AuthError,
   type AuthMode,
@@ -83,7 +84,37 @@ async function resolveOrRegisterClient(callbackPort: number): Promise<string> {
     return tokens.clientId;
   }
 
-  // 4. Otherwise, register a fresh public client with PB.
+  // 4. Embedded Dr.Max default (the manual-registration fallback path used
+  //    while Productboard's /oauth2/register endpoint is 404 in production).
+  const PLACEHOLDER = "REPLACE_WITH_DRMAX_CLIENT_ID_FROM_PB_ADMIN_UI";
+  if (DEFAULT_OAUTH_CLIENT_ID && DEFAULT_OAUTH_CLIENT_ID !== PLACEHOLDER) {
+    process.stderr.write(
+      `[productboard-mcp] No registration.json and no client_id override; ` +
+        `using embedded Dr.Max client_id.\n`
+    );
+    // Persist this as the chosen client_id so the next start finds it
+    // in registration.json without re-checking the embedded default.
+    try {
+      await writeRegistration({
+        schemaVersion: 1,
+        clientId: DEFAULT_OAUTH_CLIENT_ID,
+        clientName: "Productboard MCP (embedded default)",
+        redirectUri: `http://127.0.0.1:${callbackPort}/callback`,
+        registeredAt: new Date().toISOString(),
+        issuer: "https://app.productboard.com",
+      });
+    } catch (writeErr) {
+      process.stderr.write(
+        `[productboard-mcp] Could not persist embedded client_id to ` +
+          `registration.json: ${(writeErr as Error).message}\n`
+      );
+    }
+    return DEFAULT_OAUTH_CLIENT_ID;
+  }
+
+  // 5. Last resort — try fresh registerClient(). This will 404 on Productboard
+  //    until the upstream endpoint is fixed; the error includes manual-registration
+  //    instructions.
   process.stderr.write(
     `[productboard-mcp] No registration.json found. Self-registering OAuth public client with Productboard…\n`
   );
