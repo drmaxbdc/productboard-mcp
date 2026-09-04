@@ -184,3 +184,38 @@ export function resolveClientSecret(): string | undefined {
   if (!raw) return undefined;
   return sanitizeClientSecret(raw);
 }
+
+/**
+ * True when the resolved OAuth client is the embedded, organization-registered
+ * confidential client but no client_secret is available.
+ *
+ * Productboard's admin UI only issues confidential clients, so a token exchange
+ * for this client_id without a secret is guaranteed to fail. Detecting it before
+ * the browser opens avoids walking the user through a consent screen that cannot
+ * succeed.
+ *
+ * Gated on the embedded client_id specifically: consumers who registered their
+ * own true public client (PKCE, no secret) have a different client_id and are
+ * unaffected.
+ */
+export function isMissingRequiredClientSecret(
+  clientId: string,
+  clientSecret: string | undefined
+): boolean {
+  return clientId === DEFAULT_OAUTH_CLIENT_ID && !clientSecret;
+}
+
+/**
+ * Optional deployment-specific remediation text, appended to credential errors.
+ *
+ * This package is published publicly, so it must not hardcode any one
+ * organization's tooling, wiki URLs, or command names. Deployments inject their
+ * own instruction via PRODUCTBOARD_SETUP_HINT and it is echoed verbatim.
+ *
+ * Newlines are collapsed to spaces so an injected hint cannot break the framing
+ * of a single-line stderr record.
+ */
+export function setupHint(): string {
+  const hint = process.env.PRODUCTBOARD_SETUP_HINT?.replace(/[\r\n]+/g, " ").trim();
+  return hint ? ` ${hint}` : "";
+}

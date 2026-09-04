@@ -65,3 +65,41 @@ test("sanitizeClientSecret: returns undefined for empty quotes", () => {
 test("sanitizeClientSecret: leaves an embedded equals sign intact", () => {
   assert.equal(sanitizeClientSecret("abc=def"), "abc=def");
 });
+
+import {
+  isMissingRequiredClientSecret,
+  setupHint,
+  DEFAULT_OAUTH_CLIENT_ID,
+} from "../build/auth/types.js";
+
+test("isMissingRequiredClientSecret: true for the embedded client with no secret", () => {
+  assert.equal(isMissingRequiredClientSecret(DEFAULT_OAUTH_CLIENT_ID, undefined), true);
+});
+
+test("isMissingRequiredClientSecret: false for the embedded client with a secret", () => {
+  assert.equal(
+    isMissingRequiredClientSecret(DEFAULT_OAUTH_CLIENT_ID, "test-secret-value"),
+    false
+  );
+});
+
+test("isMissingRequiredClientSecret: false for a foreign public client with no secret", () => {
+  assert.equal(isMissingRequiredClientSecret("some-other-client-id", undefined), false);
+});
+
+test("setupHint: empty string when the env var is unset", () => {
+  delete process.env.PRODUCTBOARD_SETUP_HINT;
+  assert.equal(setupHint(), "");
+});
+
+test("setupHint: leading space and the hint when set", () => {
+  process.env.PRODUCTBOARD_SETUP_HINT = "Re-run your setup tool.";
+  assert.equal(setupHint(), " Re-run your setup tool.");
+  delete process.env.PRODUCTBOARD_SETUP_HINT;
+});
+
+test("setupHint: collapses newlines so the hint cannot break log framing", () => {
+  process.env.PRODUCTBOARD_SETUP_HINT = "line one\nline two";
+  assert.equal(setupHint(), " line one line two");
+  delete process.env.PRODUCTBOARD_SETUP_HINT;
+});
