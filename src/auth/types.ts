@@ -138,21 +138,49 @@ export const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 export const DEFAULT_OAUTH_CLIENT_ID: string = "xVJ-rOhRtGP8-BtqtaEovF8YlR6VMp91PG_mznsUCGE";
 
 /**
- * Read PRODUCTBOARD_OAUTH_CLIENT_SECRET from env. Required when the OAuth app
- * is a Confidential Client (PB's admin UI issues a client_secret for every
- * manually-registered app — there is no "Public Client" option in that UI).
- * Optional for true Public Clients (dynamic registration via /oauth2/register),
- * which use PKCE-only flow without a secret.
+ * Normalize a pasted client_secret.
  *
- * Strips whitespace and CR/LF (same defensive cleanup as buildHeaders) so a
- * pasted-with-label value doesn't smuggle bad bytes into the token request body.
+ * Users copy this value from an internal wiki page where it is presented as
+ * part of a JSON fragment, so tolerate the shapes people actually paste:
+ *   - surrounding whitespace and CR/LF (as before)
+ *   - a leading variable name followed by `=` or `:`
+ *   - wrapping single or double quotes
+ *   - a trailing comma left over from a JSON fragment
+ *
+ * Returns undefined when nothing usable remains, so an empty or
+ * quotes-only value is treated the same as an unset variable.
+ *
+ * Exported separately from resolveClientSecret() so it can be unit tested
+ * without touching process.env.
+ */
+export function sanitizeClientSecret(raw: string): string | undefined {
+  let s = raw.replace(/[\r\n]/g, "").trim();
+  // Leading variable name, e.g. `KEY=`, `KEY: `, or `"KEY": ` from JSON.
+  s = s.replace(/^["']?PRODUCTBOARD_OAUTH_CLIENT_SECRET["']?\s*[:=]\s*/i, "");
+  // Trailing comma from a JSON fragment.
+  s = s.replace(/,\s*$/, "");
+  // Matched wrapping quotes.
+  s = s.replace(/^(["'])([\s\S]*)\1$/, "$2");
+  s = s.trim();
+  return s.length > 0 ? s : undefined;
+}
+
+/**
+ * Read PRODUCTBOARD_OAUTH_CLIENT_SECRET from env. Required when the OAuth app
+ * is a Confidential Client — Productboard's admin UI issues a client_secret for
+ * every manually-registered app and offers no "Public Client" option. Optional
+ * for true Public Clients (dynamic registration via /oauth2/register), which
+ * use a PKCE-only flow without a secret.
+ *
+ * The value is distributed to Dr.Max users through their setup tooling, which
+ * points them at an internal wiki page; see sanitizeClientSecret() for why
+ * paste hygiene is handled here rather than assumed.
  *
  * Lives here, not in resolver.ts, so oauth-refresh.ts can read it at refresh
- * time without creating a resolver ↔ refresh import cycle.
+ * time without creating a resolver <-> refresh import cycle.
  */
 export function resolveClientSecret(): string | undefined {
   const raw = process.env.PRODUCTBOARD_OAUTH_CLIENT_SECRET;
   if (!raw) return undefined;
-  const cleaned = raw.replace(/[\r\n]/g, "").trim();
-  return cleaned.length > 0 ? cleaned : undefined;
+  return sanitizeClientSecret(raw);
 }
