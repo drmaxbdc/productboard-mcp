@@ -5,6 +5,18 @@ All notable changes to `@drmaxbdc/productboard-mcp` are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] — 2026-09-04
+
+### Added
+- `PRODUCTBOARD_SETUP_HINT` — optional deployment-specific remediation text appended to credential errors, so internal distribution tooling can tell users exactly what to re-run without this package hardcoding any one organization's setup.
+- First unit tests in the package (`node --test`, no new dependencies), covering the pure auth helpers.
+
+### Changed
+- A missing `PRODUCTBOARD_OAUTH_CLIENT_SECRET` is now reported on the first tool call instead of opening a browser for a consent that cannot succeed. Recorded as a deferred `setupError`, not a startup throw, so the server still starts and the remediation is visible to the caller rather than lost to `process.exit(1)`.
+- `invalid_client` responses now name the client secret as the cause — wrong value, pasted with surrounding quotes or its variable name, or rotated.
+- A `400 invalid_client` during token refresh is no longer misreported as an expired refresh token, which previously sent users into a re-authorization that failed identically.
+- The client secret is now sanitised on read: wrapping quotes, a leading variable name with `=` or `:`, and a trailing comma are stripped, so a value pasted straight out of a JSON snippet works.
+
 ## [2.0.3] — 2026-05-27
 
 Hotfix: makes 2.0.2's OAuth path actually finish. The 2.0.2 design assumed all manually-registered Productboard OAuth apps were Public Clients (PKCE-only, no secret). They are not: PB's admin UI issues a `client_secret` for every manually-registered app, with no Public Client / PKCE-only option. Authorize succeeds but token exchange fails with HTTP 400.

@@ -121,10 +121,16 @@ export const SETUP_TIMEOUT_MS = 10 * 60 * 1000;
 export const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 /**
- * Dr.Max-registered OAuth Public Client `client_id`, obtained via manual
- * registration at https://app.productboard.com/oauth2/applications. Used as
- * the default when the consumer does not set PRODUCTBOARD_OAUTH_CLIENT_ID
- * and registration.json does not exist yet.
+ * The organization-registered OAuth client_id, obtained via manual registration
+ * at https://app.productboard.com/oauth2/applications. Used as the default when
+ * the consumer sets neither PRODUCTBOARD_OAUTH_CLIENT_ID nor has an existing
+ * registration.json.
+ *
+ * A client_id is public by OAuth design, so embedding it here is safe. The
+ * matching client_secret is NOT embedded — this package is published to the
+ * public npm registry. Deployments supply it via
+ * PRODUCTBOARD_OAUTH_CLIENT_SECRET and can point users at their own
+ * distribution channel with PRODUCTBOARD_SETUP_HINT.
  *
  * Non-Dr.Max consumers can override with their own OAuth app's client_id
  * via the PRODUCTBOARD_OAUTH_CLIENT_ID env var.
