@@ -1,5 +1,6 @@
 import { ProductboardApiError } from "../utils.js";
 import type { PaginatedResponse } from "../types.js";
+import { setupHint } from "../auth/types.js";
 import type { AuthError, AuthResolution } from "../auth/types.js";
 
 const BASE_URL = "https://api.productboard.com/v2";
@@ -185,8 +186,8 @@ function convertUnauthorizedToError(v1: boolean): Error {
         "To switch to OAuth authentication instead:\n" +
         "  1. Unset PRODUCTBOARD_ACCESS_TOKEN in your environment / config\n" +
         "  2. Restart this MCP server\n" +
-        "  3. Complete the browser-based authorization flow that opens\n\n" +
-        "For Dr.Max users on tars: rerun tars-setup.sh to refresh config.",
+        "  3. Complete the browser-based authorization flow that opens" +
+        setupHint(),
     });
   }
   return new ProductboardApiError({
