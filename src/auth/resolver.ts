@@ -7,7 +7,9 @@ import {
   DEFAULT_CALLBACK_PORT,
   DEFAULT_OAUTH_CLIENT_ID,
   isAuthError,
+  isMissingRequiredClientSecret,
   resolveClientSecret,
+  setupHint,
   type AuthError,
   type AuthMode,
   type AuthResolution,
@@ -191,6 +193,23 @@ function makeOauthResolution(): AuthResolution {
     try {
       // Resolve (or self-register) the OAuth client_id before any token work.
       clientId = await resolveOrRegisterClient(callbackPort);
+
+      // No usable credentials for a confidential client — record the error and
+      // stop. Deliberately NOT thrown synchronously from createAuthResolution():
+      // index.ts would catch it and process.exit(1), so the user would see only
+      // "productboard failed to connect" with no remediation text. Recording it
+      // here lets the server start and the first tool call report the reason.
+      if (isMissingRequiredClientSecret(clientId, clientSecret)) {
+        setupError = createAuthError(
+          "config_invalid",
+          `Productboard sign-in is not configured: PRODUCTBOARD_OAUTH_CLIENT_SECRET is ` +
+            `missing or empty. This server is using the organization's registered ` +
+            `Productboard OAuth app, which requires a client secret. No browser window ` +
+            `was opened because the sign-in could not have succeeded.${setupHint()}`,
+          "set_env_var"
+        );
+        return;
+      }
 
       const loaded = await readTokens();
       if (loaded) {
