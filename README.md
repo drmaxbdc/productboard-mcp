@@ -71,7 +71,8 @@ The MCP sends `client_secret` in every `POST /oauth2/token` call (initial code-f
 | --- | --- | --- |
 | `PRODUCTBOARD_AUTH_MODE` | (unset = auto) | Set to `oauth` to force OAuth even if `PRODUCTBOARD_ACCESS_TOKEN` is set; set to `pat` to require PAT (good for CI). |
 | `PRODUCTBOARD_OAUTH_CLIENT_ID` | (embedded Dr.Max) | Your own OAuth app's client_id. Required for non-Dr.Max consumers until Productboard's dynamic registration endpoint works. |
-| `PRODUCTBOARD_OAUTH_CLIENT_SECRET` | (unset) | Required when using a Confidential Client (i.e. anything registered via PB's admin UI). Dr.Max users on tars get this from `roles.json`. Without it, token exchange returns HTTP 400. |
+| `PRODUCTBOARD_OAUTH_CLIENT_SECRET` | (unset) | Required when using a Confidential Client (i.e. anything registered via PB's admin UI). Typically supplied by internal setup tooling via the MCP config env block. Without it, the missing secret is reported on the first tool call instead of opening a browser. |
+| `PRODUCTBOARD_SETUP_HINT` | (unset) | Deployment-specific remediation text appended to credential errors, e.g. `"Re-run ./setup.sh to paste the sign-in secret."` Useful when the secret is distributed by internal tooling. |
 | `PRODUCTBOARD_OAUTH_CALLBACK_PORT` | `7779` | Override the callback port. Re-register the matching `http://127.0.0.1:<port>/callback` URI in your OAuth app. |
 | `PRODUCTBOARD_OAUTH_TOKEN_PATH` | (platform-native, see above) | Override the tokens.json location (e.g. for Docker volumes). |
 | `PRODUCTBOARD_OAUTH_REGISTRATION_PATH` | (platform-native, see above) | Override the registration.json location. |
