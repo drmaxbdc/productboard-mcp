@@ -7,11 +7,20 @@ import { registerEntityTools } from "./tools/entity-tools.js";
 import { registerRelationshipTools } from "./tools/relationship-tools.js";
 import { registerNoteTools } from "./tools/note-tools.js";
 import { registerMemberTools } from "./tools/member-tools.js";
+import { createRequire } from "node:module";
+
+// Derived from package.json rather than hardcoded: the literal that used to
+// live here drifted (it still said 2.0.3 after the 2.1.0 release), so the
+// server advertised a stale version over MCP initialize. `../package.json`
+// resolves from both src/ and build/, which are each one level down.
+const { version: PACKAGE_VERSION } = createRequire(import.meta.url)(
+  "../package.json"
+) as { version: string };
 
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "productboard",
-    version: "2.0.3",
+    version: PACKAGE_VERSION,
   });
 
   // Register all tool groups
