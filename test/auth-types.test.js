@@ -103,3 +103,37 @@ test("setupHint: collapses newlines so the hint cannot break log framing", () =>
   assert.equal(setupHint(), " line one line two");
   delete process.env.PRODUCTBOARD_SETUP_HINT;
 });
+
+import { describeTokenExchangeFailure } from "../build/auth/types.js";
+
+test("describeTokenExchangeFailure: invalid_client names the secret as the cause", () => {
+  const msg = describeTokenExchangeFailure(401, "invalid_client", "invalid_client: bad creds");
+  assert.match(msg, /client secret/i);
+  assert.match(msg, /rotated/i);
+  assert.match(msg, /PRODUCTBOARD_OAUTH_CLIENT_SECRET/);
+  assert.doesNotMatch(msg, /redirect_uri/);
+});
+
+test("describeTokenExchangeFailure: invalid_client appends the deployment hint", () => {
+  process.env.PRODUCTBOARD_SETUP_HINT = "Re-run your setup tool.";
+  const msg = describeTokenExchangeFailure(401, "invalid_client", "invalid_client");
+  assert.match(msg, /Re-run your setup tool\./);
+  delete process.env.PRODUCTBOARD_SETUP_HINT;
+});
+
+test("describeTokenExchangeFailure: invalid_grant points at a stale code", () => {
+  const msg = describeTokenExchangeFailure(400, "invalid_grant", "invalid_grant: expired");
+  assert.match(msg, /already been used or has expired/i);
+  assert.doesNotMatch(msg, /client secret is/i);
+});
+
+test("describeTokenExchangeFailure: unknown codes keep the generic guidance", () => {
+  const msg = describeTokenExchangeFailure(500, "", "(no parsable detail)");
+  assert.match(msg, /client_id, client_secret, or redirect_uri/);
+});
+
+test("describeTokenExchangeFailure: always includes status and detail", () => {
+  const msg = describeTokenExchangeFailure(418, "teapot", "teapot: short and stout");
+  assert.match(msg, /HTTP 418/);
+  assert.match(msg, /teapot: short and stout/);
+});

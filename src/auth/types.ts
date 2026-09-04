@@ -219,3 +219,35 @@ export function setupHint(): string {
   const hint = process.env.PRODUCTBOARD_SETUP_HINT?.replace(/[\r\n]+/g, " ").trim();
   return hint ? ` ${hint}` : "";
 }
+
+/**
+ * Build the operator-facing message for a failed token request.
+ *
+ * `code` is the OAuth `error` field; `safeDetail` is the already-redacted
+ * "code: description" summary. Never pass a raw response body — it can echo
+ * request parameters, including the client_secret.
+ */
+export function describeTokenExchangeFailure(
+  status: number,
+  code: string,
+  safeDetail: string
+): string {
+  const base = `Token request failed: HTTP ${status} — ${safeDetail}.`;
+  if (code === "invalid_client") {
+    return (
+      `${base} Productboard rejected the client credentials. The client secret is ` +
+      `most likely wrong, was pasted together with surrounding quotes or its variable ` +
+      `name, or has been rotated. Check PRODUCTBOARD_OAUTH_CLIENT_SECRET.${setupHint()}`
+    );
+  }
+  if (code === "invalid_grant") {
+    return (
+      `${base} The authorization code or refresh token has already been used or has ` +
+      `expired. Restart the MCP server to begin a fresh authorization.`
+    );
+  }
+  return (
+    `${base} This usually means a client_id, client_secret, or redirect_uri mismatch. ` +
+    `Verify the Productboard OAuth app configuration.`
+  );
+}
