@@ -5,6 +5,14 @@ All notable changes to `@drmaxbdc/productboard-mcp` are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] — 2026-09-04
+
+Patch release for two packaging defects shipped in 2.1.0. No behaviour changes.
+
+### Fixed
+- The version reported over MCP `initialize` is now derived from `package.json`. The hardcoded literal it replaced had drifted: 2.1.0 advertised itself as `2.0.3`, so clients logging the handshake saw the wrong version.
+- `repository.url` is normalized to `git+https://...`. npm was rewriting it on the fly at publish time and warning on every release.
+
 ## [2.1.0] — 2026-09-04
 
 ### Added
@@ -17,7 +25,6 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - A `400 invalid_client` during token refresh is no longer misreported as an expired refresh token, which previously sent users into a re-authorization that failed identically.
 - The client secret is now sanitised on read: wrapping quotes, a leading variable name with `=` or `:`, and a trailing comma are stripped, so a value pasted straight out of a JSON snippet works.
 - Two error messages that named one organization's internal setup tool now use `PRODUCTBOARD_SETUP_HINT` instead, so the published package carries no deployment-specific remediation of its own.
-- The version reported over MCP `initialize` is now derived from `package.json`. The hardcoded literal it replaces had drifted and still said `2.0.3`.
 
 ## [2.0.3] — 2026-05-27
 
