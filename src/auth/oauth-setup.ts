@@ -5,6 +5,7 @@ import { writeTokensAtomic } from "./token-store.js";
 import {
   createAuthError,
   DEFAULT_CALLBACK_PORT,
+  describeTokenExchangeFailure,
   PRODUCTBOARD_OAUTH_AUTHORIZE_URL,
   PRODUCTBOARD_OAUTH_ISSUER,
   PRODUCTBOARD_OAUTH_TOKEN_URL,
@@ -337,9 +338,10 @@ async function handleCallback(
     // client_secret. Same defensive posture as buildHeaders() for Bearer values.
     const rawBody = await exchangeResponse.text().catch(() => "");
     let safeDetail = "(no parsable detail)";
+    let code = "";
     try {
       const parsed = JSON.parse(rawBody) as { error?: string; error_description?: string };
-      const code = typeof parsed.error === "string" ? parsed.error : "";
+      code = typeof parsed.error === "string" ? parsed.error : "";
       const desc = typeof parsed.error_description === "string" ? parsed.error_description : "";
       const combined = [code, desc].filter(Boolean).join(": ");
       if (combined) safeDetail = combined;
@@ -347,18 +349,11 @@ async function handleCallback(
       // Non-JSON body: do not log it (may contain echoed credentials). Length only.
       safeDetail = `(non-JSON body, ${rawBody.length} chars suppressed)`;
     }
+    const message = describeTokenExchangeFailure(exchangeResponse.status, code, safeDetail);
     res.statusCode = 500;
     res.end("Token exchange failed. See MCP stderr for details.");
-    process.stderr.write(
-      `[productboard-mcp] Token exchange failed: HTTP ${exchangeResponse.status} — ${safeDetail}\n`
-    );
-    ctx.onFailure(
-      createAuthError(
-        "expired",
-        `Token exchange failed: HTTP ${exchangeResponse.status} — ${safeDetail}. This usually means client_id, client_secret, or redirect_uri mismatch. Verify your PB OAuth app config.`,
-        "restart_mcp"
-      )
-    );
+    process.stderr.write(`[productboard-mcp] ${message}\n`);
+    ctx.onFailure(createAuthError("expired", message, "restart_mcp"));
     return;
   }
 

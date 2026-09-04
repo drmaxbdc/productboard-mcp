@@ -1,6 +1,7 @@
 import { readTokens, writeTokensAtomic } from "./token-store.js";
 import {
   createAuthError,
+  describeTokenExchangeFailure,
   PRODUCTBOARD_OAUTH_TOKEN_URL,
   REFRESH_BUFFER_MS,
   resolveClientSecret,
@@ -97,19 +98,33 @@ async function performRefresh(current: TokenFile): Promise<TokenFile> {
     }
 
     if (response.status === 400) {
-      // invalid_grant or similar — refresh token is no longer valid
+      // A 400 is usually invalid_grant (dead refresh token), but invalid_client
+      // means the client_secret itself is wrong or rotated — a completely
+      // different fix, and re-authorizing would fail the same way.
+      //
       // Read body as text first; if it parses as JSON with our expected shape, use that.
       // We must NOT call response.json() then response.text() — the body stream is
       // single-use and the second call always fails ("body used already").
       let rawBody = "";
       try { rawBody = await response.text(); } catch { /* ignore */ }
       let detail = "(no body)";
+      let code = "";
       try {
         const errBody = JSON.parse(rawBody) as { error?: string; error_description?: string };
+        code = typeof errBody.error === "string" ? errBody.error : "";
         detail = errBody.error_description || errBody.error || "(no detail)";
       } catch {
         detail = rawBody || "(no body)";
       }
+
+      if (code === "invalid_client") {
+        throw createAuthError(
+          "config_invalid",
+          describeTokenExchangeFailure(response.status, code, detail),
+          "set_env_var"
+        );
+      }
+
       throw createAuthError(
         "expired",
         `OAuth refresh token has expired or was revoked. ${detail}\n\n` +
