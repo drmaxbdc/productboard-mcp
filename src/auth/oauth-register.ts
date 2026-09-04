@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { createAuthError } from "./types.js";
+import { createAuthError, setupHint } from "./types.js";
 import { PRODUCTBOARD_OAUTH_ISSUER } from "./types.js";
 
 const REGISTRATION_URL = `${PRODUCTBOARD_OAUTH_ISSUER}/oauth2/register`;
@@ -250,9 +250,8 @@ export async function registerClient(opts: RegisterOptions): Promise<Registratio
           `       export PRODUCTBOARD_OAUTH_CLIENT_ID='<your-client-id>'\n` +
           `       export PRODUCTBOARD_OAUTH_CLIENT_SECRET='<your-client-secret>'\n` +
           `  5. Restart this MCP server.\n\n` +
-          `Dr.Max users on tars do not need to do this — tars provides the ` +
-          `embedded Dr.Max client_id and the corresponding client_secret via ` +
-          `roles.json (when bumped to 2.0.3+).\n\n` +
+          `Deployments whose setup tooling supplies both values do not need to ` +
+          `do this.${setupHint()}\n\n` +
           `Raw upstream response body: ${rawBody || "(empty)"}`,
         "set_env_var"
       );

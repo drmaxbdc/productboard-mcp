@@ -16,6 +16,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `invalid_client` responses now name the client secret as the cause — wrong value, pasted with surrounding quotes or its variable name, or rotated.
 - A `400 invalid_client` during token refresh is no longer misreported as an expired refresh token, which previously sent users into a re-authorization that failed identically.
 - The client secret is now sanitised on read: wrapping quotes, a leading variable name with `=` or `:`, and a trailing comma are stripped, so a value pasted straight out of a JSON snippet works.
+- Two error messages that named one organization's internal setup tool now use `PRODUCTBOARD_SETUP_HINT` instead, so the published package carries no deployment-specific remediation of its own.
 
 ## [2.0.3] — 2026-05-27
 
